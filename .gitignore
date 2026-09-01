@@ -1,0 +1,37 @@
+# --- Terraform ---
+# Los providers descargados: pesan cientos de MB y se recuperan con `init`.
+.terraform/
+
+# El state puede contener valores sensibles en claro. Nunca va al repo.
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variables: suelen llevar credenciales o datos de la cuenta.
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# OJO: .terraform.lock.hcl SÍ debe versionarse. Fija las versiones exactas de
+# los providers para que todo el grupo aplique con las mismas. Por eso no
+# aparece en esta lista.
+
+# --- Node / front ---
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+
+# --- Editor / SO ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
