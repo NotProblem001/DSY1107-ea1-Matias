@@ -1,7 +1,7 @@
 # El user pool es el "tenant" de la guía 1.2.3: el directorio donde viven los
 # usuarios y, a la vez, el servidor de autorización que emite los tokens.
 resource "aws_cognito_user_pool" "pool" {
-  name = "dsy1107-grupo05"
+  name = "dsy1107-grupo09"
   # El correo es el nombre de usuario, como en cualquier CIAM.
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
@@ -23,7 +23,7 @@ resource "aws_cognito_user_pool_domain" "hosted_ui" {
   # cuentas de AWS del mundo, no solo dentro de la nuestra. Con "dsy1107-grupo01"
   # el apply fallaba con "Domain already associated with another user pool"
   # porque otro grupo del curso ya lo había reclamado.
-  domain       = "dsy1107-grupo05"
+  domain       = "dsy1107-grupo09"
   user_pool_id = aws_cognito_user_pool.pool.id
   # 1 = Hosted UI clásica. La versión 2 (Managed Login) exige definir un
   # branding style o la pantalla de login queda en blanco.
