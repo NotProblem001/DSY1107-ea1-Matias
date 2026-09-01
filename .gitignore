@@ -1,37 +1,29 @@
-# --- Terraform ---
-# Los providers descargados: pesan cientos de MB y se recuperan con `init`.
-.terraform/
+.angular
+.idea
+.vscode
+frontend/node_modules
 
-# El state puede contener valores sensibles en claro. Nunca va al repo.
-*.tfstate
-*.tfstate.*
-crash.log
-crash.*.log
+# Credenciales temporales del Learner Lab. NUNCA se versionan: son claves
+# vivas mientras dura la sesion del lab.
+credenciales-lab.env
 
-# Variables: suelen llevar credenciales o datos de la cuenta.
-*.tfvars
-*.tfvars.json
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-.terraformrc
-terraform.rc
+# Artefacto intermedio del despliegue.
+front.zip
 
-# OJO: .terraform.lock.hcl SÍ debe versionarse. Fija las versiones exactas de
-# los providers para que todo el grupo aplique con las mismas. Por eso no
-# aparece en esta lista.
+# Estado de Terraform: guarda EN CLARO la contrasena del usuario demo de
+# Cognito (aws_cognito_user.demo.password). Un "git add -A" sin esto la
+# publicaria en GitHub.
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform/
+terraform/tfplan
 
-# --- Node / front ---
-node_modules/
-dist/
-.env
-.env.local
-.env.*.local
-npm-debug.log*
+# Valores propios de cada despliegue (incluida la contrasena). El .example si.
+terraform/*.tfvars
+!terraform/*.tfvars.example
 
-# --- Editor / SO ---
-.vscode/
-.idea/
+# Artefactos de build
+frontend/dist/
+backend/target/
+
 .DS_Store
-Thumbs.db
