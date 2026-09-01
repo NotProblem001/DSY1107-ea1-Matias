@@ -3,12 +3,12 @@ resource "aws_amplify_app" "front" {
   # WEB = sitio estatico. El build de Angular son archivos,
   # no un servidor que haya que arrancar.
   platform = "WEB"
-}
 
-custom_rule {
-  source = "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>"
-  target = "/index.html"
-  status = "200"
+  custom_rule {
+    source = "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>"
+    target = "/index.html"
+    status = "200"
+  }
 }
 
 resource "aws_amplify_branch" "main" {
@@ -19,8 +19,7 @@ resource "aws_amplify_branch" "main" {
 }
 
 locals {
-  url_amplify = "https://${aws_amplify_branch.main.branch_name}.${
-  aws_amplify_app.front.default_domain}"
+  url_amplify = "https://${aws_amplify_branch.main.branch_name}.${aws_amplify_app.front.default_domain}"
 }
 
 output "amplify_app_id" {
