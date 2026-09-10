@@ -116,22 +116,48 @@ jobs:
           INT_SOL_REC: ${{ vars.INTEGRATION_SOLICITUDES_REC_ID }}
         run: |
           set -euo pipefail
-          if [ -n "$API_ID" ]; then
+          if [ -z "$API_ID" ]; then
+            echo "Buscando API_ID en API Gateway v2..."
+            API_ID=$(aws apigatewayv2 get-apis --query "Items[?contains(Name, 'api-manager')].ApiId | [0]" --output text 2>/dev/null || true)
+            if [ -z "$API_ID" ] || [ "$API_ID" = "None" ]; then
+              API_ID=$(aws apigatewayv2 get-apis --query "Items[0].ApiId" --output text 2>/dev/null || true)
+            fi
+          fi
+
+          if [ -n "$API_ID" ] && [ "$API_ID" != "None" ]; then
+            echo "API Gateway resuelto: $API_ID"
+            if [ -z "$INT_PUB" ]; then
+              INT_PUB=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, 'publico')].IntegrationId | [0]" --output text 2>/dev/null || true)
+            fi
+            if [ -z "$INT_SOL_COL" ]; then
+              INT_SOL_COL=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?IntegrationUri=='http://127.0.0.1:8080/solicitudes' || contains(IntegrationUri, ':8080/solicitudes')].IntegrationId | [0]" --output text 2>/dev/null || true)
+            fi
+            if [ -z "$INT_SOL_ELE" ]; then
+              INT_SOL_ELE=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, '{proxy}')].IntegrationId | [0]" --output text 2>/dev/null || true)
+            fi
+            if [ -z "$INT_SOL_APR" ]; then
+              INT_SOL_APR=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, 'aprobar')].IntegrationId | [0]" --output text 2>/dev/null || true)
+            fi
+            if [ -z "$INT_SOL_REC" ]; then
+              INT_SOL_REC=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, 'rechazar')].IntegrationId | [0]" --output text 2>/dev/null || true)
+            fi
+
             TAREA=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICIO" --desired-status RUNNING --query "taskArns[0]" --output text)
             ENI=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TAREA" --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text)
             IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --query "NetworkInterfaces[0].Association.PublicIp" --output text)
 
             if [ -n "$IP" ] && [ "$IP" != "None" ]; then
               echo "Reapuntando API Gateway ($API_ID) hacia http://${IP}:8080"
-              [ -n "$INT_PUB" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_PUB" --integration-uri "http://${IP}:8080/publico/info" > /dev/null || true
-              [ -n "$INT_SOL_COL" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_COL" --integration-uri "http://${IP}:8080/solicitudes" > /dev/null || true
-              [ -n "$INT_SOL_ELE" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_ELE" --integration-uri "http://${IP}:8080/solicitudes/{proxy}" > /dev/null || true
-              [ -n "$INT_SOL_APR" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_APR" --integration-uri "http://${IP}:8080/solicitudes/{id}/aprobar" > /dev/null || true
-              [ -n "$INT_SOL_REC" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_REC" --integration-uri "http://${IP}:8080/solicitudes/{id}/rechazar" > /dev/null || true
+              [ -n "$INT_PUB" ] && [ "$INT_PUB" != "None" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_PUB" --integration-uri "http://${IP}:8080/publico/info" > /dev/null || true
+              [ -n "$INT_SOL_COL" ] && [ "$INT_SOL_COL" != "None" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_COL" --integration-uri "http://${IP}:8080/solicitudes" > /dev/null || true
+              [ -n "$INT_SOL_ELE" ] && [ "$INT_SOL_ELE" != "None" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_ELE" --integration-uri "http://${IP}:8080/solicitudes/{proxy}" > /dev/null || true
+              [ -n "$INT_SOL_APR" ] && [ "$INT_SOL_APR" != "None" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_APR" --integration-uri "http://${IP}:8080/solicitudes/{id}/aprobar" > /dev/null || true
+              [ -n "$INT_SOL_REC" ] && [ "$INT_SOL_REC" != "None" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_REC" --integration-uri "http://${IP}:8080/solicitudes/{id}/rechazar" > /dev/null || true
               echo "IP_TASK=$IP" >> "$GITHUB_ENV"
+              echo "Reapunte finalizado con éxito a IP: $IP"
             fi
           else
-            echo "API_ID no definido en variables de repositorio. Se omite reapunte."
+            echo "API_ID no pudo ser resuelto. Se omite reapunte."
           fi
 
       - name: Resumen del Despliegue
