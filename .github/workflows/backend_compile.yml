@@ -1,4 +1,4 @@
-name: Backend Compile
+﻿name: Backend Compile
 
 on:
   push:
@@ -6,10 +6,14 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/backend_compile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   construir:
-    name: Build
+    name: Build & Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -17,14 +21,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Java 21
+      - name: Configurar Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
-      - name: Build
-        working-directory: backend
-        run: mvn --batch-mode --no-transfer-progress package -DskipTests
+      - name: Dar permisos de ejecución al Maven Wrapper
+        run: chmod +x backend/mvnw
 
+      - name: Compilar y ejecutar pruebas Maven
+        working-directory: backend
+        run: ./mvnw --batch-mode clean test
