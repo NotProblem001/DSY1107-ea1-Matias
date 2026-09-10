@@ -103,19 +103,21 @@ jobs:
           echo "Esperando que el servicio alcance estabilidad..."
           aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICIO"
           echo "Servicio estabilizado exitosamente."
+          echo "NUEVA_REV=$NUEVA_REV" >> "$GITHUB_ENV"
 
       - name: Reapuntar API Gateway a la IP de la nueva tarea
         env:
           CLUSTER: ${{ vars.ECS_CLUSTER || 'dsy1107-cluster-matias-araos' }}
           SERVICIO: ${{ vars.ECS_SERVICE || 'dsy1107-backend-matias-araos' }}
-          API_ID: ${{ vars.API_ID }}
-          INT_PUB: ${{ vars.INTEGRATION_PUBLICO_INFO_ID || vars.INTEGRATION_ID }}
-          INT_SOL_COL: ${{ vars.INTEGRATION_SOLICITUDES_COL_ID || vars.INTEGRATION_PRODUCTOS_COL_ID }}
-          INT_SOL_ELE: ${{ vars.INTEGRATION_SOLICITUDES_ELE_ID || vars.INTEGRATION_PRODUCTOS_ELE_ID }}
-          INT_SOL_APR: ${{ vars.INTEGRATION_SOLICITUDES_APR_ID }}
-          INT_SOL_REC: ${{ vars.INTEGRATION_SOLICITUDES_REC_ID }}
+          API_ID_VAR: ${{ vars.API_ID }}
+          INT_PUB_VAR: ${{ vars.INTEGRATION_PUBLICO_INFO_ID || vars.INTEGRATION_ID }}
+          INT_SOL_COL_VAR: ${{ vars.INTEGRATION_SOLICITUDES_COL_ID || vars.INTEGRATION_PRODUCTOS_COL_ID }}
+          INT_SOL_ELE_VAR: ${{ vars.INTEGRATION_SOLICITUDES_ELE_ID || vars.INTEGRATION_PRODUCTOS_ELE_ID }}
+          INT_SOL_APR_VAR: ${{ vars.INTEGRATION_SOLICITUDES_APR_ID }}
+          INT_SOL_REC_VAR: ${{ vars.INTEGRATION_SOLICITUDES_REC_ID }}
         run: |
           set -euo pipefail
+          API_ID="$API_ID_VAR"
           if [ -z "$API_ID" ]; then
             echo "Buscando API_ID en API Gateway v2..."
             API_ID=$(aws apigatewayv2 get-apis --query "Items[?contains(Name, 'api-manager')].ApiId | [0]" --output text 2>/dev/null || true)
@@ -126,25 +128,65 @@ jobs:
 
           if [ -n "$API_ID" ] && [ "$API_ID" != "None" ]; then
             echo "API Gateway resuelto: $API_ID"
+            INT_PUB="$INT_PUB_VAR"
+            INT_SOL_COL="$INT_SOL_COL_VAR"
+            INT_SOL_ELE="$INT_SOL_ELE_VAR"
+            INT_SOL_APR="$INT_SOL_APR_VAR"
+            INT_SOL_REC="$INT_SOL_REC_VAR"
+
             if [ -z "$INT_PUB" ]; then
-              INT_PUB=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, 'publico')].IntegrationId | [0]" --output text 2>/dev/null || true)
+              INT_PUB=$(aws apigatewayv2 get-routes --api-id "$API_ID" --query "Items[?RouteKey=='GET /publico/info'].Target | [0]" --output text 2>/dev/null | sed 's|integrations/||' || true)
             fi
             if [ -z "$INT_SOL_COL" ]; then
-              INT_SOL_COL=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?IntegrationUri=='http://127.0.0.1:8080/solicitudes' || contains(IntegrationUri, ':8080/solicitudes')].IntegrationId | [0]" --output text 2>/dev/null || true)
+              INT_SOL_COL=$(aws apigatewayv2 get-routes --api-id "$API_ID" --query "Items[?RouteKey=='POST /solicitudes'].Target | [0]" --output text 2>/dev/null | sed 's|integrations/||' || true)
             fi
             if [ -z "$INT_SOL_ELE" ]; then
-              INT_SOL_ELE=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, '{proxy}')].IntegrationId | [0]" --output text 2>/dev/null || true)
+              INT_SOL_ELE=$(aws apigatewayv2 get-routes --api-id "$API_ID" --query "Items[?RouteKey=='GET /solicitudes/{proxy+}'].Target | [0]" --output text 2>/dev/null | sed 's|integrations/||' || true)
             fi
             if [ -z "$INT_SOL_APR" ]; then
-              INT_SOL_APR=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, 'aprobar')].IntegrationId | [0]" --output text 2>/dev/null || true)
+              INT_SOL_APR=$(aws apigatewayv2 get-routes --api-id "$API_ID" --query "Items[?RouteKey=='POST /solicitudes/{id}/aprobar'].Target | [0]" --output text 2>/dev/null | sed 's|integrations/||' || true)
             fi
             if [ -z "$INT_SOL_REC" ]; then
-              INT_SOL_REC=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --query "Items[?contains(IntegrationUri, 'rechazar')].IntegrationId | [0]" --output text 2>/dev/null || true)
+              INT_SOL_REC=$(aws apigatewayv2 get-routes --api-id "$API_ID" --query "Items[?RouteKey=='POST /solicitudes/{id}/rechazar'].Target | [0]" --output text 2>/dev/null | sed 's|integrations/||' || true)
             fi
 
-            TAREA=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICIO" --desired-status RUNNING --query "taskArns[0]" --output text)
-            ENI=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TAREA" --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text)
-            IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --query "NetworkInterfaces[0].Association.PublicIp" --output text)
+            echo "Integraciones API Gateway resueltas:"
+            echo "  PUB=$INT_PUB, COL=$INT_SOL_COL, ELE=$INT_SOL_ELE, APR=$INT_SOL_APR, REC=$INT_SOL_REC"
+
+            echo "Buscando IP pública activa de la tarea en ECS ($CLUSTER/$SERVICIO)..."
+            IP=""
+            for intento in $(seq 1 30); do
+              TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICIO" --desired-status RUNNING --query "taskArns" --output text 2>/dev/null || true)
+              if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+                TAREA=""
+                if [ -n "${NUEVA_REV:-}" ]; then
+                  TAREA=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS --query "tasks[?taskDefinitionArn=='$NUEVA_REV' && lastStatus=='RUNNING'].taskArn | [0]" --output text 2>/dev/null || true)
+                fi
+                if [ -z "$TAREA" ] || [ "$TAREA" = "None" ]; then
+                  TAREA=$(echo "$TASKS" | awk '{print $NF}')
+                fi
+
+                if [ -n "$TAREA" ] && [ "$TAREA" != "None" ]; then
+                  ENI=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TAREA" --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text 2>/dev/null || true)
+                  if [ -n "$ENI" ] && [ "$ENI" != "None" ]; then
+                    IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --query "NetworkInterfaces[0].Association.PublicIp" --output text 2>/dev/null || true)
+                  fi
+                fi
+              fi
+
+              if [ -n "$IP" ] && [ "$IP" != "None" ]; then
+                echo "IP candidata detectada: $IP (intento $intento/30). Probando conectividad..."
+                if curl -s -f -m 5 "http://${IP}:8080/publico/info" >/dev/null 2>&1; then
+                  echo "¡Backend Spring Boot activo y respondiendo en http://${IP}:8080!"
+                  break
+                else
+                  echo "Backend levantando en puerto 8080... reintentando en 5s..."
+                fi
+              else
+                echo "Esperando asignación de IP pública a la tarea ECS... (intento $intento/30)"
+              fi
+              sleep 5
+            done
 
             if [ -n "$IP" ] && [ "$IP" != "None" ]; then
               echo "Reapuntando API Gateway ($API_ID) hacia http://${IP}:8080"
@@ -155,9 +197,24 @@ jobs:
               [ -n "$INT_SOL_REC" ] && [ "$INT_SOL_REC" != "None" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_REC" --integration-uri "http://${IP}:8080/solicitudes/{id}/rechazar" > /dev/null || true
               echo "IP_TASK=$IP" >> "$GITHUB_ENV"
               echo "Reapunte finalizado con éxito a IP: $IP"
+
+              echo "Verificando respuesta a través de API Gateway..."
+              sleep 3
+              API_ENDPOINT=$(aws apigatewayv2 get-apis --query "Items[?ApiId=='$API_ID'].ApiEndpoint | [0]" --output text 2>/dev/null || true)
+              if [ -n "$API_ENDPOINT" ] && [ "$API_ENDPOINT" != "None" ]; then
+                if curl -s -f -m 10 "${API_ENDPOINT}/publico/info" >/dev/null 2>&1; then
+                  echo "¡Verificación exitosa! API Gateway responde HTTP 200 en ${API_ENDPOINT}/publico/info"
+                else
+                  echo "Aviso: API Gateway aún propagando cambios hacia ${API_ENDPOINT}..."
+                fi
+              fi
+            else
+              echo "::error::No se pudo resolver una IP pública activa para el contenedor Fargate."
+              exit 1
             fi
           else
-            echo "API_ID no pudo ser resuelto. Se omite reapunte."
+            echo "::error::API_ID no pudo ser resuelto en API Gateway."
+            exit 1
           fi
 
       - name: Resumen del Despliegue
