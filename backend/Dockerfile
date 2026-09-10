@@ -1,4 +1,4 @@
-﻿# Dockerfile para microservicio Spring Boot (Java 21)
+# Dockerfile para microservicio Spring Boot (Java 21)
 # Optimizado para AWS ECS Fargate (linux/amd64)
 FROM eclipse-temurin:21-jre-jammy
 

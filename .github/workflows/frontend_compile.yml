@@ -1,4 +1,4 @@
-﻿name: Frontend Compile
+name: Frontend Compile
 
 on:
   push:

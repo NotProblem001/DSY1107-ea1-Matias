@@ -1,4 +1,4 @@
-﻿name: Backend Compile
+name: Backend Compile
 
 on:
   push:

@@ -1,4 +1,4 @@
-﻿package com.DSY1107.cloudnative.controller;
+package com.DSY1107.cloudnative.controller;
 
 import com.DSY1107.cloudnative.model.Producto;
 import org.springframework.http.HttpStatus;

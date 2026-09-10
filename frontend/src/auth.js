@@ -1,4 +1,4 @@
-﻿// Authorization Code Flow with PKCE contra Cognito, implementado a mano.
+// Authorization Code Flow with PKCE contra Cognito, implementado a mano.
 // Cada función está anotada con el paso equivalente del diagrama de Auth0.
 // Cognito es un servidor OAuth 2.0 / OIDC estándar: solo cambian las URLs.
 

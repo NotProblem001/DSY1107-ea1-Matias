@@ -1,4 +1,4 @@
-﻿package com.DSY1107.cloudnative.model;
+package com.DSY1107.cloudnative.model;
 
 public class Producto {
     private Long id;

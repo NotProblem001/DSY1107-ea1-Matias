@@ -53,16 +53,54 @@ jobs:
       - name: Actualizar código en AWS Lambda
         run: |
           set -euo pipefail
-          echo "Actualizando función Lambda: $FUNCION"
+          echo "Verificando disponibilidad de la función Lambda: $FUNCION"
 
-          aws lambda update-function-code \
-            --function-name "$FUNCION" \
-            --zip-file fileb://user-token-ms.zip \
-            --query 'CodeSha256' --output text
+          echo "Esperando que la función Lambda esté activa y lista para actualizaciones..."
+          for i in $(seq 1 30); do
+            STATE=$(aws lambda get-function-configuration --function-name "$FUNCION" --query 'State' --output text 2>/dev/null || true)
+            UPDATE_STATUS=$(aws lambda get-function-configuration --function-name "$FUNCION" --query 'LastUpdateStatus' --output text 2>/dev/null || true)
+            echo "Estado actual de Lambda: State=$STATE, LastUpdateStatus=$UPDATE_STATUS (intento $i/30)"
+            if [ "$STATE" = "Active" ] && [ "$UPDATE_STATUS" != "InProgress" ]; then
+              echo "Lambda lista para actualización."
+              break
+            fi
+            sleep 5
+          done
+
+          echo "Actualizando código de la función Lambda..."
+          ACTUALIZADO=0
+          for i in $(seq 1 10); do
+            if aws lambda update-function-code \
+                --function-name "$FUNCION" \
+                --zip-file fileb://user-token-ms.zip \
+                --query 'CodeSha256' --output text; then
+              ACTUALIZADO=1
+              break
+            else
+              echo "Aviso: Error temporal al actualizar código (posible conflicto o inicialización en progreso). Reintentando en 6s... (intento $i/10)"
+              sleep 6
+            fi
+          done
+
+          if [ "$ACTUALIZADO" -ne 1 ]; then
+            echo "::error::No se pudo actualizar el código de la función Lambda tras 10 intentos."
+            exit 1
+          fi
 
           echo "Esperando que la actualización del Lambda finalice..."
-          aws lambda wait function-updated --function-name "$FUNCION"
-          echo "Función Lambda actualizada correctamente."
+          for i in $(seq 1 30); do
+            UPDATE_STATUS=$(aws lambda get-function-configuration --function-name "$FUNCION" --query 'LastUpdateStatus' --output text 2>/dev/null || true)
+            echo "Estado de la actualización: $UPDATE_STATUS (intento $i/30)"
+            if [ "$UPDATE_STATUS" = "Successful" ]; then
+              echo "Función Lambda actualizada correctamente."
+              break
+            fi
+            if [ "$UPDATE_STATUS" = "Failed" ]; then
+              echo "::error::La actualización de la función Lambda falló."
+              exit 1
+            fi
+            sleep 3
+          done
 
       - name: Comprobar el Lambda desplegado (Smoke Test)
         run: |

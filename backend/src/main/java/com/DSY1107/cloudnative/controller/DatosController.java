@@ -1,4 +1,4 @@
-﻿package com.DSY1107.cloudnative.controller;
+package com.DSY1107.cloudnative.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
