@@ -1,4 +1,4 @@
-﻿# IDaaS: Directorio de Usuarios y Servidor de Autorización OAuth2/OIDC
+# IDaaS: Directorio de Usuarios y Servidor de Autorización OAuth2/OIDC
 resource "aws_cognito_user_pool" "pool" {
   name = "dsy1107-${lower(var.estudiante)}"
 

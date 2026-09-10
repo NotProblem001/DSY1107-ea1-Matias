@@ -1,4 +1,4 @@
-﻿# Red y VPC por defecto para despliegue en AWS Academy Learner Lab
+# Red y VPC por defecto para despliegue en AWS Academy Learner Lab
 data "aws_vpc" "default" {
   default = true
 }
@@ -79,8 +79,8 @@ resource "aws_ecs_task_definition" "backend" {
   cpu                      = "256"
   memory                   = "512"
   # ARN del rol resuelto dinámicamente según la cuenta activa de AWS Academy
-  execution_role_arn       = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
-  task_role_arn            = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
+  execution_role_arn = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
+  task_role_arn      = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
 
   runtime_platform {
     operating_system_family = "LINUX"

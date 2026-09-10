@@ -1,4 +1,4 @@
-﻿# --- Hosting y Frontend (AWS Amplify y Cognito) ---
+# --- Hosting y Frontend (AWS Amplify y Cognito) ---
 output "amplify_app_id" {
   description = "ID de la aplicación en AWS Amplify"
   value       = aws_amplify_app.front.id

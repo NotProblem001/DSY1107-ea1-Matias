@@ -1,4 +1,4 @@
-﻿resource "aws_amplify_app" "front" {
+resource "aws_amplify_app" "front" {
   name     = "dsy1107-${var.estudiante}"
   platform = "WEB"
 

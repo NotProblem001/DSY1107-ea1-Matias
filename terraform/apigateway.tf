@@ -1,4 +1,4 @@
-﻿# API Manager: HTTP API Gateway con JWT Authorizer y Scope Guard
+# API Manager: HTTP API Gateway con JWT Authorizer y Scope Guard
 resource "aws_apigatewayv2_api" "api_manager" {
   name          = "api-manager-${lower(var.estudiante)}"
   protocol_type = "HTTP"
