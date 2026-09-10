@@ -1,10 +1,13 @@
-# El user pool es el "tenant" de la guía 1.2.3: el directorio donde viven los
-# usuarios y, a la vez, el servidor de autorización que emite los tokens.
+﻿# IDaaS: Directorio y Servidor de Autorización OAuth2/OIDC
 resource "aws_cognito_user_pool" "pool" {
-  name = "dsy1107-grupo09"
-  # El correo es el nombre de usuario, como en cualquier CIAM.
+  name = "dsy1107-${lower(var.estudiante)}"
+
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
+
+  # ESSENTIALS es obligatorio para soportar Pre-Token Generation V2_0
+  user_pool_tier = "ESSENTIALS"
+
   password_policy {
     minimum_length    = 8
     require_lowercase = true
@@ -12,48 +15,87 @@ resource "aws_cognito_user_pool" "pool" {
     require_numbers   = true
     require_symbols   = false
   }
-  # Solo un administrador crea usuarios. Con auto-registro esto sería false.
+
   admin_create_user_config {
     allow_admin_create_user_only = true
   }
+
+  # Conexión con el Trigger Pre Token Generation V2
+  lambda_config {
+    pre_token_generation_config {
+      lambda_version = "V2_0"
+      lambda_arn     = aws_lambda_function.user_token_ms.arn
+    }
+  }
 }
 
+# Dominio del Hosted UI (debe ser único en toda la región)
 resource "aws_cognito_user_pool_domain" "hosted_ui" {
-  # OJO: este prefijo es único en TODA la región us-east-1, entre todas las
-  # cuentas de AWS del mundo, no solo dentro de la nuestra. Con "dsy1107-grupo01"
-  # el apply fallaba con "Domain already associated with another user pool"
-  # porque otro grupo del curso ya lo había reclamado.
-  domain       = "dsy1107-grupo09"
-  user_pool_id = aws_cognito_user_pool.pool.id
-  # 1 = Hosted UI clásica. La versión 2 (Managed Login) exige definir un
-  # branding style o la pantalla de login queda en blanco.
+  domain                = "dsy1107-${lower(var.estudiante)}"
+  user_pool_id          = aws_cognito_user_pool.pool.id
   managed_login_version = 1
 }
 
-# Nuestro front en React es un CLIENTE PÚBLICO: su código se descarga completo
-# en el navegador, así que no puede guardar un secreto. Por eso
-# generate_secret = false y por eso el flujo es Authorization Code + PKCE.
+# Resource Server que define los scopes de negocio de la API
+resource "aws_cognito_resource_server" "productos" {
+  identifier   = "productos"
+  name         = "API de Productos"
+  user_pool_id = aws_cognito_user_pool.pool.id
+
+  scope {
+    scope_name        = "read"
+    scope_description = "Consultar inventario de productos"
+  }
+
+  scope {
+    scope_name        = "write"
+    scope_description = "Crear, modificar y eliminar productos"
+  }
+}
+
+# Grupos de usuarios que representan los roles del sistema
+resource "aws_cognito_user_group" "lectores" {
+  name         = "lectores"
+  user_pool_id = aws_cognito_user_pool.pool.id
+  description  = "Usuarios con permisos de solo lectura (productos/read)"
+}
+
+resource "aws_cognito_user_group" "editores" {
+  name         = "editores"
+  user_pool_id = aws_cognito_user_pool.pool.id
+  description  = "Usuarios con permisos de lectura y escritura (productos/read y productos/write)"
+}
+
+# Cliente público para la Single Page Application (SPA)
 resource "aws_cognito_user_pool_client" "spa" {
   name         = "spa-react"
   user_pool_id = aws_cognito_user_pool.pool.id
 
-  generate_secret = false
-
+  generate_secret                      = false
   allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows                  = ["code"] # PKCE Flow
   supported_identity_providers         = ["COGNITO"]
-  allowed_oauth_scopes                 = ["openid", "email", "profile"]
 
-  # Debe coincidir EXACTAMENTE con el redirect_uri que envíe la aplicación,
-  # incluida la barra final. Es el error número uno de esta actividad.
-  callback_urls = ["http://localhost:5173/"]
-  logout_urls   = ["http://localhost:5173/"]
+  # REGLA DE SEGURIDAD: Los scopes de negocio (productos/*) NO se declaran aqui;
+  # son inyectados exclusivamente por el Lambda Pre-Token V2 segun el grupo.
+  allowed_oauth_scopes = [
+    "openid",
+    "email",
+    "profile",
+    "aws.cognito.signin.user.admin"
+  ]
 
-  # ALLOW_USER_PASSWORD_AUTH se habilita solo para poder probar por consola.
-  # Más adelante se quita: una app nunca debe ver la contraseña del usuario.
+  callback_urls = [
+    "http://localhost:5173/",
+    "${local.url_amplify}/"
+  ]
+  logout_urls = [
+    "http://localhost:5173/",
+    "${local.url_amplify}/"
+  ]
+
   explicit_auth_flows = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
 
-  # Tokens cortos a propósito: que expiren durante la clase es parte del ejercicio.
   access_token_validity = 60
   id_token_validity     = 60
 
@@ -61,24 +103,30 @@ resource "aws_cognito_user_pool_client" "spa" {
     access_token = "minutes"
     id_token     = "minutes"
   }
+
+  depends_on = [
+    aws_cognito_resource_server.productos
+  ]
 }
 
-# Recurso para crear un usuario de prueba automáticamente
+# Usuario de prueba inicial
 resource "aws_cognito_user" "demo" {
   user_pool_id = aws_cognito_user_pool.pool.id
-
-  # El username debe ser el correo porque así lo definiste en el User Pool
-  username = "alumno@duocuc.cl"
-
-  # Debe cumplir con tu política: 8 caracteres, mayúscula, minúscula y número
-  password = "CloudNative2024"
+  username     = "alumno@duocuc.cl"
+  password     = "CloudNative2024"
 
   attributes = {
     email          = "alumno@duocuc.cl"
-    email_verified = true # Lo marcamos como verificado para que funcione de inmediato
-    name           = "Test"
+    email_verified = true
+    name           = "Alumno Demo"
   }
 
-  # SUPPRESS evita que AWS intente enviar un correo de bienvenida real al usuario
   message_action = "SUPPRESS"
+}
+
+# Asignacion inicial del usuario demo al grupo lectores
+resource "aws_cognito_user_in_group" "demo_lector" {
+  user_pool_id = aws_cognito_user_pool.pool.id
+  group_name   = aws_cognito_user_group.lectores.name
+  username     = aws_cognito_user.demo.username
 }

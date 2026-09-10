@@ -1,24 +1,33 @@
-.angular
+﻿.angular
 .idea
 .vscode
-frontend/node_modules
+node_modules/
+frontend/node_modules/
 
-# Credenciales temporales del Learner Lab. NUNCA se versionan: son claves
-# vivas mientras dura la sesion del lab.
+# Credenciales y variables locales
+*.env
+*.env.local
+.env
+.env.local
 credenciales-lab.env
+!*.env.example
 
-# Artefacto intermedio del despliegue.
+# Artefactos temporales de despliegue
 front.zip
+user-token-ms.zip
+task-definition.json
+evento.json
+salida.json
+frontend/public/config.json
 
-# Estado de Terraform: guarda EN CLARO la contrasena del usuario demo de
-# Cognito (aws_cognito_user.demo.password). Un "git add -A" sin esto la
-# publicaria en GitHub.
+# Estado de Terraform
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/.terraform/
 terraform/tfplan
+terraform/.terraform.lock.hcl
 
-# Valores propios de cada despliegue (incluida la contrasena). El .example si.
+# Valores sensibles de Terraform
 terraform/*.tfvars
 !terraform/*.tfvars.example
 
@@ -27,3 +36,4 @@ frontend/dist/
 backend/target/
 
 .DS_Store
+Thumbs.db

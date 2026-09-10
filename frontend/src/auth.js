@@ -1,16 +1,39 @@
-// Authorization Code Flow with PKCE contra Cognito, implementado a mano.
-// Cada función está anotada con el paso equivalente del diagrama de Auth0
-// (https://auth0.com/docs/get-started/authentication-and-authorization-flow/
-//  authorization-code-flow-with-pkce). Cognito es un servidor OAuth 2.0 /
-// OIDC estándar, así que el flujo es idéntico: solo cambian las URLs.
+﻿// Authorization Code Flow with PKCE contra Cognito, implementado a mano.
+// Cada función está anotada con el paso equivalente del diagrama de Auth0.
+// Cognito es un servidor OAuth 2.0 / OIDC estándar: solo cambian las URLs.
 
 import { randomString, challengeFromVerifier } from './pkce.js'
 
-export const config = {
-  domain: import.meta.env.VITE_COGNITO_DOMAIN,
-  clientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
-  redirectUri: import.meta.env.VITE_REDIRECT_URI,
-  scopes: ['openid', 'email', 'profile'],
+let runtimeConfig = {
+  domain: import.meta.env.VITE_COGNITO_DOMAIN || '',
+  clientId: import.meta.env.VITE_COGNITO_CLIENT_ID || '',
+  redirectUri: import.meta.env.VITE_REDIRECT_URI || 'http://localhost:5173/',
+  apiUrl: import.meta.env.VITE_API_BASE || '',
+  scopes: ['openid', 'email', 'profile', 'aws.cognito.signin.user.admin'],
+}
+
+// Permite acceso reactivo a las variables configuradas
+export const config = new Proxy(runtimeConfig, {
+  get(target, prop) {
+    return target[prop]
+  },
+})
+
+// Carga configuración dinámica generada en Amplify (public/config.json) con fallback a .env
+export async function cargarConfiguracion() {
+  try {
+    const respuesta = await fetch('/config.json', { cache: 'no-store' })
+    if (respuesta.ok) {
+      const json = await respuesta.json()
+      if (json.cognitoDomain) runtimeConfig.domain = json.cognitoDomain
+      if (json.clientId) runtimeConfig.clientId = json.clientId
+      if (json.redirectUri) runtimeConfig.redirectUri = json.redirectUri
+      if (json.apiUrl) runtimeConfig.apiUrl = json.apiUrl
+    }
+  } catch {
+    // Si falla, se conservan los valores inyectados por Vite (import.meta.env)
+  }
+  return runtimeConfig
 }
 
 // Endpoints del servidor de autorización de Cognito.
@@ -20,17 +43,13 @@ const endpoints = {
   logout: () => `${config.domain}/logout`,
 }
 
-// Guardamos verifier y state en sessionStorage porque tienen que sobrevivir a
-// la redirección completa al Hosted UI y de vuelta. sessionStorage muere al
-// cerrar la pestaña, que para este caso es lo correcto.
 const CLAVE_VERIFIER = 'pkce_code_verifier'
 const CLAVE_STATE = 'oauth_state'
 const CLAVE_TOKENS = 'oauth_tokens'
 
-// ---------------------------------------------------------------- pasos 1-3
-// El usuario pulsa "Iniciar sesión". Generamos el par verifier/challenge,
-// un "state" anti-CSRF, y redirigimos al servidor de autorización.
+// Pasos 1-3: Generación de verifier y challenge PKCE + redirección a Cognito
 export async function login() {
+  await cargarConfiguracion()
   const verifier = randomString()
   const challenge = await challengeFromVerifier(verifier)
   const state = randomString(16)
@@ -39,25 +58,21 @@ export async function login() {
   sessionStorage.setItem(CLAVE_STATE, state)
 
   const params = new URLSearchParams({
-    response_type: 'code', // pedimos un CODE, no un token: eso es "code flow"
+    response_type: 'code',
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
     scope: config.scopes.join(' '),
-    state, // vuelve intacto en el callback; si no coincide, es un ataque
-    code_challenge: challenge, // solo viaja el HASH, nunca el verifier
+    state,
+    code_challenge: challenge,
     code_challenge_method: 'S256',
   })
 
-  // Redirección completa del navegador (pasos 4-5: login y consentimiento
-  // ocurren en el dominio de Cognito, nuestra app no ve la contraseña jamás).
   window.location.assign(`${endpoints.authorize()}?${params}`)
 }
 
-// ---------------------------------------------------------------- pasos 6-9
-// Cognito nos devuelve a redirect_uri con ?code=...&state=... . Canjeamos ese
-// code por tokens, adjuntando el code_verifier original. El servidor calcula
-// SHA-256(verifier) y lo compara con el challenge que guardó en el paso 6.
+// Pasos 6-9: Canje de authorization_code por tokens JWT usando el code_verifier
 export async function handleRedirectCallback() {
+  await cargarConfiguracion()
   const url = new URL(window.location.href)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
@@ -68,12 +83,11 @@ export async function handleRedirectCallback() {
     limpiarUrl()
     throw new Error(`${error}: ${detalle ?? 'sin detalle'}`)
   }
-  if (!code) return null // no venimos de un callback, no hay nada que hacer
+  if (!code) return null
 
   const stateEsperado = sessionStorage.getItem(CLAVE_STATE)
   const verifier = sessionStorage.getItem(CLAVE_VERIFIER)
 
-  // Validación anti-CSRF: sin esto, un atacante podría inyectarnos SU code.
   if (!stateEsperado || state !== stateEsperado) {
     limpiarUrl()
     throw new Error('El parámetro "state" no coincide. Se aborta el login.')
@@ -85,10 +99,10 @@ export async function handleRedirectCallback() {
 
   const cuerpo = new URLSearchParams({
     grant_type: 'authorization_code',
-    client_id: config.clientId, // sin client_secret: somos cliente público
+    client_id: config.clientId,
     code,
-    redirect_uri: config.redirectUri, // debe ser IDÉNTICO al del paso 3
-    code_verifier: verifier, // aquí se revela el secreto original
+    redirect_uri: config.redirectUri,
+    code_verifier: verifier,
   })
 
   const respuesta = await fetch(endpoints.token(), {
@@ -97,8 +111,6 @@ export async function handleRedirectCallback() {
     body: cuerpo,
   })
 
-  // Siempre limpiamos: el code es de un solo uso y no debe quedar en el
-  // historial del navegador ni en la barra de direcciones.
   sessionStorage.removeItem(CLAVE_VERIFIER)
   sessionStorage.removeItem(CLAVE_STATE)
   limpiarUrl()
@@ -112,8 +124,9 @@ export async function handleRedirectCallback() {
   return guardarTokens(tokens)
 }
 
-// Renovar el access token sin volver a molestar al usuario.
+// Renovar el access token usando el refresh token
 export async function refresh(refreshToken) {
+  await cargarConfiguracion()
   const cuerpo = new URLSearchParams({
     grant_type: 'refresh_token',
     client_id: config.clientId,
@@ -129,24 +142,19 @@ export async function refresh(refreshToken) {
     throw new Error(`No se pudo refrescar (${respuesta.status})`)
   }
 
-  // Ojo: la respuesta del refresh NO trae un refresh_token nuevo. Hay que
-  // conservar el que ya teníamos o se pierde la sesión.
   const tokens = await respuesta.json()
   return guardarTokens({ ...tokens, refresh_token: refreshToken })
 }
 
+// Logout destruyendo sesión local y redirigiendo a Cognito /logout
 export function logout() {
   sessionStorage.removeItem(CLAVE_TOKENS)
   const params = new URLSearchParams({
     client_id: config.clientId,
-    logout_uri: config.redirectUri, // debe estar en logout_urls del Terraform
+    logout_uri: config.redirectUri,
   })
-  // Cierra también la sesión EN Cognito. Si solo borráramos los tokens
-  // locales, el siguiente login entraría solo, sin pedir credenciales.
   window.location.assign(`${endpoints.logout()}?${params}`)
 }
-
-// ------------------------------------------------------------------ helpers
 
 export function guardarTokens(tokens) {
   const conVencimiento = {
@@ -172,8 +180,6 @@ export function tokenVencido(tokens) {
   return Date.now() >= tokens.expires_at
 }
 
-// Decodifica el payload de un JWT para MOSTRARLO. Esto NO valida la firma:
-// el front puede leer el token, pero quien debe verificarlo es la API.
 export function decodificarJwt(jwt) {
   if (!jwt) return null
   try {
@@ -192,8 +198,8 @@ function limpiarUrl() {
 
 export function configIncompleta() {
   const faltantes = []
-  if (!config.domain) faltantes.push('VITE_COGNITO_DOMAIN')
-  if (!config.clientId) faltantes.push('VITE_COGNITO_CLIENT_ID')
-  if (!config.redirectUri) faltantes.push('VITE_REDIRECT_URI')
+  if (!config.domain) faltantes.push('VITE_COGNITO_DOMAIN o cognitoDomain')
+  if (!config.clientId) faltantes.push('VITE_COGNITO_CLIENT_ID o clientId')
+  if (!config.redirectUri) faltantes.push('VITE_REDIRECT_URI o redirectUri')
   return faltantes
 }

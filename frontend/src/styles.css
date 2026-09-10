@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --fondo: #0f1420;
   --panel: #171d2c;
   --borde: #273043;
@@ -7,6 +7,7 @@
   --acento: #6ea8fe;
   --ok: #57d9a3;
   --mal: #ff7b72;
+  --aviso: #f6c177;
   color-scheme: dark;
 }
 
@@ -23,30 +24,30 @@ body {
 }
 
 main {
-  max-width: 820px;
+  max-width: 920px;
   margin: 0 auto;
   padding: 2.5rem 1.25rem 4rem;
 }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   margin: 0 0 0.25rem;
 }
 
 h2 {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   margin: 0 0 0.75rem;
 }
 
 h3 {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--tenue);
   margin: 1rem 0 0.35rem;
 }
 
 .sub {
   color: var(--tenue);
-  margin: 0 0 2rem;
+  margin: 0 0 1.5rem;
   font-size: 0.9rem;
 }
 
@@ -63,6 +64,7 @@ summary {
   cursor: pointer;
   color: var(--tenue);
   font-size: 0.9rem;
+  font-weight: 500;
 }
 
 button {
@@ -70,13 +72,15 @@ button {
   padding: 0.55rem 1.1rem;
   border-radius: 7px;
   border: 1px solid var(--borde);
-  background: transparent;
+  background: #1f273b;
   color: var(--texto);
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 button:hover:not(:disabled) {
   border-color: var(--acento);
+  background: #252f47;
 }
 
 button:disabled {
@@ -91,6 +95,11 @@ button.primario {
   font-weight: 600;
 }
 
+button.peligro {
+  border-color: var(--mal);
+  color: var(--mal);
+}
+
 .acciones {
   display: flex;
   gap: 0.6rem;
@@ -100,8 +109,8 @@ button.primario {
 
 dl {
   display: grid;
-  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
-  gap: 0.4rem 1rem;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: 0.5rem 1rem;
   margin: 0;
 }
 
@@ -141,12 +150,91 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.info-box {
+  background: rgba(110, 168, 254, 0.1);
+  border: 1px solid var(--acento);
+  color: var(--texto);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
 .vigente {
   color: var(--ok);
+  font-weight: 500;
 }
 
 .vencido {
   color: var(--mal);
+  font-weight: 500;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-right: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+
+.badge-scope {
+  background: #233454;
+  color: #8bb8ff;
+  border: 1px solid #36538c;
+}
+
+.badge-scope.destacado {
+  background: #173d32;
+  color: #57d9a3;
+  border: 1px solid #20614e;
+}
+
+.badge-ok {
+  background: rgba(87, 217, 163, 0.2);
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+
+.badge-mal {
+  background: rgba(255, 123, 114, 0.2);
+  color: var(--mal);
+  border: 1px solid var(--mal);
+}
+
+.badge-aviso {
+  background: rgba(246, 193, 119, 0.2);
+  color: var(--aviso);
+  border: 1px solid var(--aviso);
+}
+
+.grid-pruebas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.tarjeta-prueba {
+  background: #131825;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tarjeta-prueba h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.tarjeta-prueba p {
+  font-size: 0.82rem;
+  color: var(--tenue);
+  margin: 0 0 0.8rem;
 }
 
 @media (max-width: 560px) {

@@ -1,4 +1,4 @@
-name: User Token MS Deploy
+﻿name: User Token MS Deploy
 
 # Despliegue del Lambda que decide los scopes de cada usuario.
 #
@@ -51,7 +51,7 @@ jobs:
       # rotacion de cuenta del Learner Lab. No hay nada que resincronizar.
       #
       # Si clonas este repo para otro estudiante, este es el valor que cambia.
-      FUNCION: user-token-ms-rivera
+      FUNCION: ${{ vars.LAMBDA_USER_TOKEN_MS || 'user-token-ms-matias-araos' }}
 
     defaults:
       run:
