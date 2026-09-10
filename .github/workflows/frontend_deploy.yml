@@ -84,19 +84,20 @@ jobs:
           fi
           echo "Redirect URI: $REDIRECT_URI"
 
+          # 3. Resolver User Pool y CLIENT_ID de Cognito
           CLIENT_ID="$CLIENT_ID_VAR"
           COGNITO_DOMAIN="$COGNITO_DOMAIN_VAR"
           if [ -z "$CLIENT_ID" ] || [ -z "$COGNITO_DOMAIN" ]; then
             echo "Consultando Cognito User Pools..."
-            POOL_ID=$(aws cognito-idp list-user-pools --max-results 20 --query "UserPools[?name=='dsy1107-matias-araos'].Id" --output text 2>/dev/null || true)
+            POOL_ID=$(aws cognito-idp list-user-pools --max-results 20 --query "UserPools[?contains(Name, 'dsy1107')].Id | [0]" --output text 2>/dev/null || true)
             if [ -z "$POOL_ID" ] || [ "$POOL_ID" = "None" ]; then
-              POOL_ID=$(aws cognito-idp list-user-pools --max-results 20 --query "UserPools[?contains(name, 'dsy1107')].Id" --output text 2>/dev/null || true)
+              POOL_ID=$(aws cognito-idp list-user-pools --max-results 20 --query "UserPools[0].Id" --output text 2>/dev/null || true)
             fi
             echo "Cognito User Pool ID: $POOL_ID"
 
             if [ -n "$POOL_ID" ] && [ "$POOL_ID" != "None" ]; then
               if [ -z "$CLIENT_ID" ]; then
-                CLIENT_ID=$(aws cognito-idp list-user-pool-clients --user-pool-id "$POOL_ID" --query "UserPoolClients[?ClientName=='spa-react'].ClientId" --output text 2>/dev/null || true)
+                CLIENT_ID=$(aws cognito-idp list-user-pool-clients --user-pool-id "$POOL_ID" --query "UserPoolClients[?ClientName=='spa-react'].ClientId | [0]" --output text 2>/dev/null || true)
                 if [ -z "$CLIENT_ID" ] || [ "$CLIENT_ID" = "None" ]; then
                   CLIENT_ID=$(aws cognito-idp list-user-pool-clients --user-pool-id "$POOL_ID" --query "UserPoolClients[0].ClientId" --output text 2>/dev/null || true)
                 fi
@@ -114,10 +115,14 @@ jobs:
           echo "Cognito Domain: $COGNITO_DOMAIN"
           echo "Cognito Client ID: $CLIENT_ID"
 
+          # 4. Resolver API Gateway URL
           API_URL="$API_URL_VAR"
           if [ -z "$API_URL" ]; then
             echo "Consultando API Gateway v2..."
-            API_URL=$(aws apigatewayv2 get-apis --query "Items[?contains(Name, 'api-manager')].ApiEndpoint" --output text 2>/dev/null || true)
+            API_URL=$(aws apigatewayv2 get-apis --query "Items[?contains(Name, 'api-manager')].ApiEndpoint | [0]" --output text 2>/dev/null || true)
+            if [ -z "$API_URL" ] || [ "$API_URL" = "None" ]; then
+              API_URL=$(aws apigatewayv2 get-apis --query "Items[?ProtocolType=='HTTP'].ApiEndpoint | [0]" --output text 2>/dev/null || true)
+            fi
             if [ -z "$API_URL" ] || [ "$API_URL" = "None" ]; then
               API_URL=$(aws apigatewayv2 get-apis --query "Items[0].ApiEndpoint" --output text 2>/dev/null || true)
             fi
@@ -128,10 +133,12 @@ jobs:
           if [ -n "$COGNITO_DOMAIN" ] && [ -n "$CLIENT_ID" ] && [ "$CLIENT_ID" != "None" ] && [ -n "$REDIRECT_URI" ] && [ -n "$API_URL" ] && [ "$API_URL" != "None" ]; then
             echo "Inyectando configuración real en frontend/public/config.json..."
             scripts/config-frontend.sh
+            echo "Contenido generado:"
+            cat frontend/public/config.json
           else
-            echo "::warning::No se resolvieron todas las variables. Usando fallback..."
-            mkdir -p frontend/public
-            cp frontend/public/config.example.json frontend/public/config.json || true
+            echo "::error::No se pudieron resolver las credenciales reales de AWS (Cognito/API Gateway)."
+            echo "Valores: POOL_ID=$POOL_ID, CLIENT_ID=$CLIENT_ID, COGNITO_DOMAIN=$COGNITO_DOMAIN, API_URL=$API_URL"
+            exit 1
           fi
 
           echo "APP_ID_FINAL=$APP_ID" >> "$GITHUB_ENV"
@@ -146,7 +153,11 @@ jobs:
 
       - name: Compilar Frontend (React + Vite)
         working-directory: frontend
-        run: npm run build
+        run: |
+          npm run build
+          cp public/config.json dist/config.json
+          echo "Verificando dist/config.json:"
+          cat dist/config.json
 
       - name: Desplegar en AWS Amplify
         env:
