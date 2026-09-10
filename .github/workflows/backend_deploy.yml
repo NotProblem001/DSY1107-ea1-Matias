@@ -1,4 +1,4 @@
-﻿name: Backend Deploy
+name: Backend Deploy
 
 on:
   push:
@@ -109,9 +109,11 @@ jobs:
           CLUSTER: ${{ vars.ECS_CLUSTER || 'dsy1107-cluster-matias-araos' }}
           SERVICIO: ${{ vars.ECS_SERVICE || 'dsy1107-backend-matias-araos' }}
           API_ID: ${{ vars.API_ID }}
-          INT_DATOS: ${{ vars.INTEGRATION_ID }}
-          INT_PROD_COL: ${{ vars.INTEGRATION_PRODUCTOS_COL_ID }}
-          INT_PROD_ELE: ${{ vars.INTEGRATION_PRODUCTOS_ELE_ID }}
+          INT_PUB: ${{ vars.INTEGRATION_PUBLICO_INFO_ID || vars.INTEGRATION_ID }}
+          INT_SOL_COL: ${{ vars.INTEGRATION_SOLICITUDES_COL_ID || vars.INTEGRATION_PRODUCTOS_COL_ID }}
+          INT_SOL_ELE: ${{ vars.INTEGRATION_SOLICITUDES_ELE_ID || vars.INTEGRATION_PRODUCTOS_ELE_ID }}
+          INT_SOL_APR: ${{ vars.INTEGRATION_SOLICITUDES_APR_ID }}
+          INT_SOL_REC: ${{ vars.INTEGRATION_SOLICITUDES_REC_ID }}
         run: |
           set -euo pipefail
           if [ -n "$API_ID" ]; then
@@ -121,9 +123,11 @@ jobs:
 
             if [ -n "$IP" ] && [ "$IP" != "None" ]; then
               echo "Reapuntando API Gateway ($API_ID) hacia http://${IP}:8080"
-              [ -n "$INT_DATOS" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_DATOS" --integration-uri "http://${IP}:8080/datos" > /dev/null || true
-              [ -n "$INT_PROD_COL" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_PROD_COL" --integration-uri "http://${IP}:8080/productos" > /dev/null || true
-              [ -n "$INT_PROD_ELE" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_PROD_ELE" --integration-uri "http://${IP}:8080/productos/{proxy}" > /dev/null || true
+              [ -n "$INT_PUB" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_PUB" --integration-uri "http://${IP}:8080/publico/info" > /dev/null || true
+              [ -n "$INT_SOL_COL" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_COL" --integration-uri "http://${IP}:8080/solicitudes" > /dev/null || true
+              [ -n "$INT_SOL_ELE" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_ELE" --integration-uri "http://${IP}:8080/solicitudes/{proxy}" > /dev/null || true
+              [ -n "$INT_SOL_APR" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_APR" --integration-uri "http://${IP}:8080/solicitudes/{id}/aprobar" > /dev/null || true
+              [ -n "$INT_SOL_REC" ] && aws apigatewayv2 update-integration --api-id "$API_ID" --integration-id "$INT_SOL_REC" --integration-uri "http://${IP}:8080/solicitudes/{id}/rechazar" > /dev/null || true
               echo "IP_TASK=$IP" >> "$GITHUB_ENV"
             fi
           else

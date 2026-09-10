@@ -32,11 +32,13 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 # ignore_changes en integration_uri es indispensable: la IP de la task Fargate
 # cambia en cada despliegue y los scripts (publicar-ecs.sh / backend_deploy.yml)
 # la actualizan dinámicamente sin pisar la infraestructura de Terraform.
-resource "aws_apigatewayv2_integration" "backend_datos" {
+
+# 1. Integración Pública para Información y Contraste
+resource "aws_apigatewayv2_integration" "backend_publico_info" {
   api_id                 = aws_apigatewayv2_api.api_manager.id
   integration_type       = "HTTP_PROXY"
   integration_method     = "GET"
-  integration_uri        = "http://127.0.0.1:8080/datos"
+  integration_uri        = "http://127.0.0.1:8080/publico/info"
   payload_format_version = "1.0"
 
   lifecycle {
@@ -44,11 +46,12 @@ resource "aws_apigatewayv2_integration" "backend_datos" {
   }
 }
 
-resource "aws_apigatewayv2_integration" "backend_productos_col" {
+# 2. Integración Colección /solicitudes (GET, POST)
+resource "aws_apigatewayv2_integration" "backend_solicitudes_col" {
   api_id                 = aws_apigatewayv2_api.api_manager.id
   integration_type       = "HTTP_PROXY"
   integration_method     = "ANY"
-  integration_uri        = "http://127.0.0.1:8080/productos"
+  integration_uri        = "http://127.0.0.1:8080/solicitudes"
   payload_format_version = "1.0"
 
   lifecycle {
@@ -56,11 +59,12 @@ resource "aws_apigatewayv2_integration" "backend_productos_col" {
   }
 }
 
-resource "aws_apigatewayv2_integration" "backend_productos_ele" {
+# 3. Integración Elemento /solicitudes/{proxy} (GET, PUT, DELETE)
+resource "aws_apigatewayv2_integration" "backend_solicitudes_ele" {
   api_id                 = aws_apigatewayv2_api.api_manager.id
   integration_type       = "HTTP_PROXY"
   integration_method     = "ANY"
-  integration_uri        = "http://127.0.0.1:8080/productos/{proxy}"
+  integration_uri        = "http://127.0.0.1:8080/solicitudes/{proxy}"
   payload_format_version = "1.0"
 
   lifecycle {
@@ -68,11 +72,12 @@ resource "aws_apigatewayv2_integration" "backend_productos_ele" {
   }
 }
 
-resource "aws_apigatewayv2_integration" "backend_publico" {
+# 4. Integración Acción Aprobar /solicitudes/{id}/aprobar (POST)
+resource "aws_apigatewayv2_integration" "backend_solicitudes_apr" {
   api_id                 = aws_apigatewayv2_api.api_manager.id
   integration_type       = "HTTP_PROXY"
-  integration_method     = "GET"
-  integration_uri        = "http://127.0.0.1:8080/publico/datos"
+  integration_method     = "POST"
+  integration_uri        = "http://127.0.0.1:8080/solicitudes/{id}/aprobar"
   payload_format_version = "1.0"
 
   lifecycle {
@@ -80,70 +85,95 @@ resource "aws_apigatewayv2_integration" "backend_publico" {
   }
 }
 
-# --- Rutas Protegidas y Públicas ---
+# 5. Integración Acción Rechazar /solicitudes/{id}/rechazar (POST)
+resource "aws_apigatewayv2_integration" "backend_solicitudes_rec" {
+  api_id                 = aws_apigatewayv2_api.api_manager.id
+  integration_type       = "HTTP_PROXY"
+  integration_method     = "POST"
+  integration_uri        = "http://127.0.0.1:8080/solicitudes/{id}/rechazar"
+  payload_format_version = "1.0"
 
-# 1. Ruta pública sin autorizador (para contraste)
-resource "aws_apigatewayv2_route" "publico" {
+  lifecycle {
+    ignore_changes = [integration_uri]
+  }
+}
+
+# --- Rutas Protegidas y Públicas (Scope Guard en el Perímetro RA1) ---
+
+# 1. Ruta pública sin autorizador (para contraste y healthcheck informativo)
+resource "aws_apigatewayv2_route" "publico_info" {
   api_id    = aws_apigatewayv2_api.api_manager.id
-  route_key = "GET /publico/datos"
-  target    = "integrations/${aws_apigatewayv2_integration.backend_publico.id}"
+  route_key = "GET /publico/info"
+  target    = "integrations/${aws_apigatewayv2_integration.backend_publico_info.id}"
 }
 
-# 2. Ruta protegida con scope base openid
-resource "aws_apigatewayv2_route" "datos" {
+# 2. Rutas de Lectura de Solicitudes (requiere solicitudes/read)
+# Acceso permitido para: solicitantes y aprobadores
+resource "aws_apigatewayv2_route" "get_solicitudes" {
   api_id               = aws_apigatewayv2_api.api_manager.id
-  route_key            = "GET /datos"
-  target               = "integrations/${aws_apigatewayv2_integration.backend_datos.id}"
+  route_key            = "GET /solicitudes"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_solicitudes_col.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["openid"]
+  authorization_scopes = ["solicitudes/read"]
 }
 
-# 3. Rutas de Lectura de Productos (requiere productos/read)
-resource "aws_apigatewayv2_route" "get_productos" {
+resource "aws_apigatewayv2_route" "get_solicitudes_id" {
   api_id               = aws_apigatewayv2_api.api_manager.id
-  route_key            = "GET /productos"
-  target               = "integrations/${aws_apigatewayv2_integration.backend_productos_col.id}"
+  route_key            = "GET /solicitudes/{proxy+}"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_solicitudes_ele.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["productos/read"]
+  authorization_scopes = ["solicitudes/read"]
 }
 
-resource "aws_apigatewayv2_route" "get_productos_id" {
+# 3. Rutas de Escritura de Solicitudes (requiere solicitudes/write)
+# Acceso exclusivo para: solicitantes (aprobadores son rechazados con 403 Forbidden)
+resource "aws_apigatewayv2_route" "post_solicitudes" {
   api_id               = aws_apigatewayv2_api.api_manager.id
-  route_key            = "GET /productos/{proxy+}"
-  target               = "integrations/${aws_apigatewayv2_integration.backend_productos_ele.id}"
+  route_key            = "POST /solicitudes"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_solicitudes_col.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["productos/read"]
+  authorization_scopes = ["solicitudes/write"]
 }
 
-# 4. Rutas de Escritura de Productos (requiere productos/write)
-resource "aws_apigatewayv2_route" "post_productos" {
+resource "aws_apigatewayv2_route" "put_solicitudes" {
   api_id               = aws_apigatewayv2_api.api_manager.id
-  route_key            = "POST /productos"
-  target               = "integrations/${aws_apigatewayv2_integration.backend_productos_col.id}"
+  route_key            = "PUT /solicitudes/{proxy+}"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_solicitudes_ele.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["productos/write"]
+  authorization_scopes = ["solicitudes/write"]
 }
 
-resource "aws_apigatewayv2_route" "put_productos" {
+resource "aws_apigatewayv2_route" "delete_solicitudes" {
   api_id               = aws_apigatewayv2_api.api_manager.id
-  route_key            = "PUT /productos/{proxy+}"
-  target               = "integrations/${aws_apigatewayv2_integration.backend_productos_ele.id}"
+  route_key            = "DELETE /solicitudes/{proxy+}"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_solicitudes_ele.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["productos/write"]
+  authorization_scopes = ["solicitudes/write"]
 }
 
-resource "aws_apigatewayv2_route" "delete_productos" {
+# 4. Rutas de Aprobación y Rechazo (requiere solicitudes/approve)
+# Acceso exclusivo para: aprobadores (solicitantes son rechazados con 403 Forbidden)
+resource "aws_apigatewayv2_route" "post_solicitudes_aprobar" {
   api_id               = aws_apigatewayv2_api.api_manager.id
-  route_key            = "DELETE /productos/{proxy+}"
-  target               = "integrations/${aws_apigatewayv2_integration.backend_productos_ele.id}"
+  route_key            = "POST /solicitudes/{id}/aprobar"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_solicitudes_apr.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["productos/write"]
+  authorization_scopes = ["solicitudes/approve"]
+}
+
+resource "aws_apigatewayv2_route" "post_solicitudes_rechazar" {
+  api_id               = aws_apigatewayv2_api.api_manager.id
+  route_key            = "POST /solicitudes/{id}/rechazar"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_solicitudes_rec.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
+  authorization_scopes = ["solicitudes/approve"]
 }
 
 # Stages

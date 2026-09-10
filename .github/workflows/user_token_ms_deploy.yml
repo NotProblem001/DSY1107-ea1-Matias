@@ -1,4 +1,4 @@
-﻿name: User Token MS Deploy
+name: User Token MS Deploy
 
 on:
   push:
@@ -75,7 +75,7 @@ jobs:
             "userName": "smoke-test",
             "request": {
               "userAttributes": { "email": "smoke@ci" },
-              "groupConfiguration": { "groupsToOverride": ["editores"] }
+              "groupConfiguration": { "groupsToOverride": ["solicitantes"] }
             },
             "response": {}
           }
@@ -88,9 +88,9 @@ jobs:
             salida.json > /dev/null
 
           scopes=$(jq -c '.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd' salida.json)
-          echo "Scopes devueltos para un editor: $scopes"
+          echo "Scopes devueltos para un solicitante: $scopes"
 
-          if [ "$scopes" != '["productos/read","productos/write"]' ]; then
+          if [ "$scopes" != '["solicitudes/read","solicitudes/write"]' ]; then
             echo "::error::El Lambda desplegado no concede los scopes esperados: $scopes"
             jq . salida.json
             exit 1
@@ -99,5 +99,5 @@ jobs:
           {
             echo "### Lambda Pre-Token V2 Desplegado"
             echo ""
-            echo "Verificación: Usuario en grupo \`editores\` recibe: \`${scopes}\`"
+            echo "Verificación: Usuario en grupo \`solicitantes\` recibe: \`${scopes}\`"
           } >> "$GITHUB_STEP_SUMMARY"

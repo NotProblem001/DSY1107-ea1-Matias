@@ -1,4 +1,4 @@
-﻿import { config, cargarConfiguracion } from './auth.js'
+import { config, cargarConfiguracion } from './auth.js'
 
 async function obtenerApiBase() {
   await cargarConfiguracion()
@@ -67,40 +67,106 @@ function diagnosticarEstado(status, ruta) {
   }
 }
 
-// 1. Endpoint público para prueba de contraste
-export async function obtenerDatosPublicos() {
-  return realizarPeticion('/publico/datos', { method: 'GET' })
+// 1. Endpoint público de contraste e información del sistema (sin token)
+export async function obtenerInfoPublica() {
+  return realizarPeticion('/publico/info', { method: 'GET' })
 }
 
-// 2. Endpoint protegido /datos (requiere openid)
-export async function obtenerDatos(accessToken) {
-  return realizarPeticion('/datos', {
+// 2. Consulta de solicitudes (requiere scope: solicitudes/read)
+export async function obtenerSolicitudes(accessToken, solicitanteEmail = null) {
+  const query = solicitanteEmail ? `?solicitante=${encodeURIComponent(solicitanteEmail)}` : ''
+  return realizarPeticion(`/solicitudes${query}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
 }
 
-// 3. Endpoint protegido /productos - Lectura (requiere productos/read)
-export async function obtenerProductos(accessToken) {
-  return realizarPeticion('/productos', {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-}
-
-// 4. Endpoint protegido /productos - Escritura (requiere productos/write)
-export async function crearProducto(accessToken, producto) {
-  return realizarPeticion('/productos', {
+// 3. Crear solicitud de vacaciones (requiere scope: solicitudes/write)
+export async function crearSolicitud(accessToken, solicitud) {
+  return realizarPeticion('/solicitudes', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(producto),
+    body: JSON.stringify(solicitud),
   })
 }
 
-// 5. Prueba directa sin credenciales (debe devolver 401 en rutas protegidas)
-export async function probarSinToken(ruta = '/productos') {
-  return realizarPeticion(ruta, { method: 'GET' })
+// 4. Modificar solicitud de vacaciones (requiere scope: solicitudes/write)
+export async function actualizarSolicitud(accessToken, id, solicitud) {
+  return realizarPeticion(`/solicitudes/${id}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(solicitud),
+  })
+}
+
+// 5. Eliminar solicitud de vacaciones (requiere scope: solicitudes/write)
+export async function eliminarSolicitud(accessToken, id) {
+  return realizarPeticion(`/solicitudes/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+}
+
+// 6. Aprobar solicitud (requiere scope: solicitudes/approve)
+export async function aprobarSolicitud(accessToken, id, { comentario, aprobadorEmail } = {}) {
+  return realizarPeticion(`/solicitudes/${id}/aprobar`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      comentario: comentario || 'Aprobado según disponibilidad del equipo.',
+      aprobadorEmail: aprobadorEmail || 'aprobador@duocuc.cl',
+    }),
+  })
+}
+
+// 7. Rechazar solicitud (requiere scope: solicitudes/approve)
+export async function rechazarSolicitud(accessToken, id, { comentario, aprobadorEmail } = {}) {
+  return realizarPeticion(`/solicitudes/${id}/rechazar`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      comentario: comentario || 'Rechazado por tope de fechas con otros miembros.',
+      aprobadorEmail: aprobadorEmail || 'aprobador@duocuc.cl',
+    }),
+  })
+}
+
+// 8. Prueba directa sin credenciales (debe devolver 401 Unauthorized en rutas protegidas)
+export async function probarSinToken(ruta = '/solicitudes', metodo = 'GET') {
+  return realizarPeticion(ruta, { method: metodo })
+}
+
+// Métodos retrocompatibles
+export async function obtenerDatosPublicos() {
+  return obtenerInfoPublica()
+}
+
+export async function obtenerDatos(accessToken) {
+  return obtenerSolicitudes(accessToken)
+}
+
+export async function obtenerProductos(accessToken) {
+  return obtenerSolicitudes(accessToken)
+}
+
+export async function crearProducto(accessToken, producto) {
+  return crearSolicitud(accessToken, {
+    solicitanteEmail: 'demo@duocuc.cl',
+    fechaInicio: '2026-03-01',
+    fechaFin: '2026-03-10',
+    dias: 10,
+    motivo: producto?.nombre || 'Vacaciones',
+  })
 }

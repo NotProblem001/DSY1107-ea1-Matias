@@ -1,4 +1,4 @@
-﻿# Guía y Lista de Verificación — DSY1107 · Experiencia de Aprendizaje 1 (RA1)
+# Guía y Lista de Verificación — DSY1107 · Experiencia de Aprendizaje 1 (RA1)
 
 Este documento sirve como manual de auditoría, corrección y verificación para asegurar que el repositorio cumpla con los estándares de la **EA1** y los requerimientos del **Resultado de Aprendizaje 1 (RA1)**:
 > *"Diseña soluciones de manera colaborativa, utilizando una plataforma API Manager y soluciones Identity as a Service, con el fin de gestionar, escalar, filtrar, autenticar y securitizar el uso de APIs."*
@@ -81,94 +81,132 @@ Los pipelines de GitHub Actions dependen de nombres y rutas exactas. Cualquier a
 ### 2.3. Identity as a Service (IDaaS) — `terraform/cognito.tf`
 - [x] **User Pool:**
   - `username_attributes = ["email"]`
-  - `user_pool_tier = "ESSENTIALS"` (Necesario para Pre Token Generation V2_0).
+  - `user_pool_tier = "ESSENTIALS"` (Obligatorio para Pre Token Generation V2_0).
 - [x] **Hosted UI & Domain:** Dominio configurado con `managed_login_version = 1`.
 - [x] **User Pool Client (SPA):**
   - `generate_secret = false` (Cliente público).
   - `allowed_oauth_flows = ["code"]` (Authorization Code Flow con PKCE).
   - `allowed_oauth_scopes = ["openid", "email", "profile", "aws.cognito.signin.user.admin"]`.
-  - **REGLA DE SEGURIDAD:** Los scopes de negocio (`productos/read`, `productos/write`) **NO** están en `allowed_oauth_scopes` del cliente (solo los concede el Lambda).
+  - **REGLA DE SEGURIDAD PERIMETRAL (RA1):** Los scopes de negocio (`solicitudes/read`, `solicitudes/write`, `solicitudes/approve`) **NO** están en `allowed_oauth_scopes` del cliente (son inyectados dinámicamente por el Lambda Pre-Token V2).
   - `callback_urls` y `logout_urls` contienen `http://localhost:5173/` y la URL pública de Amplify con `/` final.
 - [x] **Resource Server:**
-  - `identifier = "productos"` con scopes `read` y `write`.
+  - `identifier = "solicitudes"` con 3 scopes declarados:
+    * `read` -> "Consultar solicitudes"
+    * `write` -> "Crear, modificar y eliminar solicitudes"
+    * `approve` -> "Aprobar o rechazar solicitudes"
 - [x] **Grupos de Usuarios:**
-  - Grupos `lectores` y `editores`.
-  - Usuario de prueba demo en `lectores`.
-- [x] **Lambda Pre Token Generation V2:**
+  - `solicitantes`: Rol con permisos de consulta y radicación (`solicitudes/read`, `solicitudes/write`).
+  - `aprobadores`: Rol con permisos de consulta y decisión (`solicitudes/read`, `solicitudes/approve`).
+  - Usuarios demo precargados: `solicitante@duocuc.cl` y `aprobador@duocuc.cl`.
+- [x] **Lambda Pre Token Generation V2 (`user-token-ms`):**
   - `lambda_version = "V2_0"`.
-  - El código JS/MJS añade scopes vía `claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd`.
+  - Inyecta scopes según grupo vía `claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd`.
   - Recurso `aws_lambda_permission` configurado para invocar desde Cognito.
 
-### 2.4. API Manager — `terraform/apigateway.tf`
+### 2.4. API Manager (Scope Guard en el Perímetro) — `terraform/apigateway.tf`
 - [x] **HTTP API (v2):** Configuración de CORS con `allow_origins = ["http://localhost:5173", "https://main.<app_id>.amplifyapp.com"]` (sin barra final) y headers `Authorization`, `Content-Type`.
 - [x] **JWT Authorizer:**
   - `identity_sources = ["$request.header.Authorization"]`
   - `issuer = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.pool.id}"`
   - `audience = [aws_cognito_user_pool_client.spa.id]`
-- [x] **Rutas Protegidas por Scopes:**
-  - `GET /datos` -> `authorization_scopes = ["openid"]`
-  - `GET /productos` -> `authorization_scopes = ["productos/read"]`
-  - `GET /productos/{proxy+}` -> `authorization_scopes = ["productos/read"]`
-  - `POST /productos` -> `authorization_scopes = ["productos/write"]`
-  - `PUT /productos/{proxy+}` -> `authorization_scopes = ["productos/write"]`
-  - `DELETE /productos/{proxy+}` -> `authorization_scopes = ["productos/write"]`
-- [x] **Integraciones Backend:** Separadas entre `/datos` y microservicio CRUD de `/productos`.
+- [x] **Rutas Protegidas por Scopes (Scope Guard):**
+  - `GET /publico/info` -> Sin autorizador (ruta pública de contraste).
+  - `GET /solicitudes` y `GET /solicitudes/{proxy+}` -> `authorization_scopes = ["solicitudes/read"]`
+  - `POST /solicitudes`, `PUT /solicitudes/{proxy+}`, `DELETE /solicitudes/{proxy+}` -> `authorization_scopes = ["solicitudes/write"]`
+  - `POST /solicitudes/{id}/aprobar` -> `authorization_scopes = ["solicitudes/approve"]`
+  - `POST /solicitudes/{id}/rechazar` -> `authorization_scopes = ["solicitudes/approve"]`
+- [x] **Integraciones Backend:** Integraciones HTTP Proxy hacia ECS Fargate con `lifecycle { ignore_changes = [integration_uri] }`.
 
 ### 2.5. Frontend SPA — `frontend/`
 - [x] `vite.config.js` fija el puerto `5173` con `strictPort: true`.
-- [x] Flujo PKCE completo: generación de `code_verifier` y `code_challenge` S256 en login, almacenamiento temporal en `sessionStorage`, canje en `/oauth2/token` y limpieza de URL.
-- [x] Inspección visual de tokens: ID Token (datos de usuario) vs Access Token (scopes).
-- [x] Botones para probar endpoints con y sin token.
-- [x] Botón de Logout llamando a `/logout` de Cognito para invalidar la sesión SSO.
+- [x] Flujo PKCE completo: generación de `code_verifier` y `code_challenge` S256 en login, almacenamiento en `sessionStorage`, canje en `/oauth2/token` y limpieza de URL.
+- [x] Vista Solicitante: formulario para radicar solicitudes, tabla de solicitudes propias y acciones de edición/eliminación.
+- [x] Vista Aprobador: tabla de solicitudes pendientes, campo para observaciones y botones de Aprobar/Rechazar.
+- [x] Consola interactiva de validación del Scope Guard perimetral (401, 200, 201, 403).
+- [x] Inspección visual de tokens: ID Token (identidad) vs Access Token (scopes concedidos).
 
 ### 2.6. Amplify & Backend Fargate
 - [x] `aws_amplify_app` en modo `WEB` con `custom_rule` de reescritura para SPA hacia `/index.html` (preservando `/config.json`).
-- [x] `backend/pom.xml` configurado con Spring Boot y Java 21.
-- [x] Dockerfile construido para `--platform linux/amd64`.
-- [x] `aws_route.salida_a_internet` declarada (`0.0.0.0/0`) en la tabla de ruteo de la VPC.
+- [x] `backend/pom.xml` configurado con Spring Boot y Java 21 LTS.
+- [x] Controlador `SolicitudesController` y modelo `SolicitudVacaciones` implementados con cero lógica manual de autorización (seguridad delegada 100% al perímetro).
+- [x] Dockerfile multi-stage construido para `--platform linux/amd64`.
 - [x] `aws_ecs_service` con `assign_public_ip = true` y `lifecycle { ignore_changes = [task_definition] }`.
 
 ---
 
-## 3. Matriz de Comprobación y Demostración
+## 3. Matriz de Comprobación y Demostración (Scope Guard RA1)
 
-| Escenario | Petición | Respuesta Esperada | Punto de Validación |
-| :--- | :--- | :--- | :--- |
-| **Sin Token** | `GET /productos` | `401 Unauthorized` | API Gateway Authorizer |
-| **Token Lector** | `GET /productos` | `200 OK` | Backend Spring Boot |
-| **Lector en POST** | `POST /productos` | `403 Forbidden` | API Gateway Scope Guard |
-| **Editor en POST** | `POST /productos` | `201 Created` | Backend Spring Boot |
-| **Ruta Pública** | `GET /publico/datos` | `200 OK` | Integración directa |
+| Escenario | Método y Endpoint | Rol / Token | Código HTTP | Diagnóstico y Punto de Validación |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Sin Token** | `GET /solicitudes` | Ninguno | `401 Unauthorized` | API Gateway JWT Authorizer bloquea petición anónima. |
+| **2. Ruta Pública** | `GET /publico/info` | Ninguno | `200 OK` | Ruta sin autorizador permite acceso directo de contraste. |
+| **3. Consulta Solicitante** | `GET /solicitudes` | Solicitante (`solicitudes/read`) | `200 OK` | API Gateway valida scope de lectura y hace proxy al backend. |
+| **4. Creación Solicitante** | `POST /solicitudes` | Solicitante (`solicitudes/write`) | `201 Created` | Backend registra solicitud con estado inicial `PENDIENTE`. |
+| **5. Intento Ilegal Solicitante** | `POST /solicitudes/1/aprobar` | Solicitante (`solicitudes/write`) | `403 Forbidden` | Scope Guard de API Gateway rechaza en el perímetro (falta `approve`). |
+| **6. Aprobación Jefatura** | `POST /solicitudes/1/aprobar` | Aprobador (`solicitudes/approve`) | `200 OK` | API Gateway valida scope `approve` y backend cambia estado a `APROBADA`. |
+| **7. Intento Ilegal Aprobador** | `POST /solicitudes` | Aprobador (`solicitudes/approve`) | `403 Forbidden` | Scope Guard rechaza porque el aprobador no tiene `solicitudes/write`. |
 
 ---
 
-## 4. Comandos de Verificación Rápida
+## 4. Comandos de Verificación con cURL
 
-### Comprobar estructura de archivos localmente:
+Exporta tus variables de entorno para ejecutar las comprobaciones:
 ```bash
-# Verificar que backend no esté anidado
-ls -la backend/pom.xml backend/Dockerfile
-
-# Verificar scripts con permisos de ejecución
-chmod +x scripts/*.sh
-
-# Verificar sintaxis y formateo de Terraform
-cd terraform
-terraform fmt -check
-terraform validate
+API_URL="https://<API_ID>.execute-api.us-east-1.amazonaws.com"
+TOKEN_SOLICITANTE="<ACCESS_TOKEN_DEL_SOLICITANTE>"
+TOKEN_APROBADOR="<ACCESS_TOKEN_DEL_APROBADOR>"
 ```
 
-### Probar endpoints con cURL y JWT:
+### Escenario 1: Petición sin token (Esperado HTTP 401 Unauthorized)
 ```bash
-# Probar 401
-curl -i -X GET https://<API_GATEWAY_URL>/productos
+curl -i -X GET "${API_URL}/solicitudes"
+```
 
-# Probar 403 vs 200 con Access Token
-curl -i -X GET https://<API_GATEWAY_URL>/productos \
-  -H "Authorization: Bearer $ACCESS_TOKEN"
+### Escenario 2: Endpoint público de contraste (Esperado HTTP 200 OK)
+```bash
+curl -i -X GET "${API_URL}/publico/info"
+```
 
-curl -i -X POST https://<API_GATEWAY_URL>/productos \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
+### Escenario 3: Solicitante consulta sus solicitudes (Esperado HTTP 200 OK)
+```bash
+curl -i -X GET "${API_URL}/solicitudes" \
+  -H "Authorization: Bearer ${TOKEN_SOLICITANTE}"
+```
+
+### Escenario 4: Solicitante crea una nueva solicitud (Esperado HTTP 201 Created)
+```bash
+curl -i -X POST "${API_URL}/solicitudes" \
+  -H "Authorization: Bearer ${TOKEN_SOLICITANTE}" \
   -H "Content-Type: application/json" \
-  -d '{"nombre":"Producto Demo","precio":9990}'
+  -d '{
+    "solicitanteEmail": "solicitante@duocuc.cl",
+    "fechaInicio": "2026-03-01",
+    "fechaFin": "2026-03-15",
+    "dias": 14,
+    "motivo": "Vacaciones legales anuales"
+  }'
+```
+
+### Escenario 5: Solicitante intenta aprobar (Esperado HTTP 403 Forbidden por Scope Guard)
+```bash
+curl -i -X POST "${API_URL}/solicitudes/1/aprobar" \
+  -H "Authorization: Bearer ${TOKEN_SOLICITANTE}" \
+  -H "Content-Type: application/json" \
+  -d '{"comentario": "Auto-aprobación no permitida"}'
+```
+*Respuesta esperada:*
+```json
+{"message":"Forbidden"}
+```
+*(Nótese que la petición ni siquiera llega a Spring Boot; es rechazada en el borde por API Gateway).*
+
+### Escenario 6: Aprobador aprueba la solicitud (Esperado HTTP 200 OK)
+```bash
+curl -i -X POST "${API_URL}/solicitudes/1/aprobar" \
+  -H "Authorization: Bearer ${TOKEN_APROBADOR}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "comentario": "Aprobado conforme al plan de contingencia del equipo.",
+    "aprobadorEmail": "aprobador@duocuc.cl"
+  }'
 ```

@@ -29,14 +29,25 @@ output "api_endpoint" {
   value       = aws_apigatewayv2_api.api_manager.api_endpoint
 }
 
+output "url_publico_info" {
+  description = "Endpoint público informativo de contraste"
+  value       = "${aws_apigatewayv2_api.api_manager.api_endpoint}/publico/info"
+}
+
+output "url_solicitudes_protegido" {
+  description = "Endpoint de /solicitudes con Scope Guard"
+  value       = "${aws_apigatewayv2_api.api_manager.api_endpoint}/solicitudes"
+}
+
+# Alias de compatibilidad
 output "url_datos_protegido" {
-  description = "Endpoint de /datos con autorizador JWT"
-  value       = "${aws_apigatewayv2_api.api_manager.api_endpoint}/datos"
+  description = "Alias de compatibilidad para ruta protegida"
+  value       = "${aws_apigatewayv2_api.api_manager.api_endpoint}/solicitudes"
 }
 
 output "url_productos_protegido" {
-  description = "Endpoint de /productos con Scope Guard"
-  value       = "${aws_apigatewayv2_api.api_manager.api_endpoint}/productos"
+  description = "Alias de compatibilidad para ruta de negocio"
+  value       = "${aws_apigatewayv2_api.api_manager.api_endpoint}/solicitudes"
 }
 
 # --- Backend y Cómputo (ECS Fargate / ECR) ---
@@ -61,19 +72,45 @@ output "api_id" {
   value       = aws_apigatewayv2_api.api_manager.id
 }
 
+output "integracion_publico_info_id" {
+  description = "ID de la integración HTTP de /publico/info"
+  value       = aws_apigatewayv2_integration.backend_publico_info.id
+}
+
+output "integracion_solicitudes_coleccion_id" {
+  description = "ID de la integración HTTP de colección /solicitudes"
+  value       = aws_apigatewayv2_integration.backend_solicitudes_col.id
+}
+
+output "integracion_solicitudes_elemento_id" {
+  description = "ID de la integración HTTP de elemento /solicitudes/{proxy}"
+  value       = aws_apigatewayv2_integration.backend_solicitudes_ele.id
+}
+
+output "integracion_solicitudes_aprobar_id" {
+  description = "ID de la integración HTTP de acción /solicitudes/{id}/aprobar"
+  value       = aws_apigatewayv2_integration.backend_solicitudes_apr.id
+}
+
+output "integracion_solicitudes_rechazar_id" {
+  description = "ID de la integración HTTP de acción /solicitudes/{id}/rechazar"
+  value       = aws_apigatewayv2_integration.backend_solicitudes_rec.id
+}
+
+# Alias retrocompatibles para scripts anteriores
 output "integracion_id" {
-  description = "ID de la integración HTTP de /datos"
-  value       = aws_apigatewayv2_integration.backend_datos.id
+  description = "Alias retrocompatible de integración principal"
+  value       = aws_apigatewayv2_integration.backend_publico_info.id
 }
 
 output "integracion_productos_coleccion_id" {
-  description = "ID de la integración HTTP de colección /productos"
-  value       = aws_apigatewayv2_integration.backend_productos_col.id
+  description = "Alias retrocompatible de integración colección"
+  value       = aws_apigatewayv2_integration.backend_solicitudes_col.id
 }
 
 output "integracion_productos_elemento_id" {
-  description = "ID de la integración HTTP de elemento /productos/{proxy}"
-  value       = aws_apigatewayv2_integration.backend_productos_ele.id
+  description = "Alias retrocompatible de integración elemento"
+  value       = aws_apigatewayv2_integration.backend_solicitudes_ele.id
 }
 
 output "lambda_user_token_ms" {

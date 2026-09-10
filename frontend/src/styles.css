@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --fondo: #0f1420;
   --panel: #171d2c;
   --borde: #273043;
@@ -242,3 +242,138 @@ pre {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Extensiones para Gestión de Vacaciones (RA1) --- */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--borde);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.25rem;
+}
+
+.tab-boton {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--tenue);
+  padding: 0.6rem 1.2rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: -0.35rem;
+}
+
+.tab-boton:hover {
+  color: var(--texto);
+  background: transparent;
+}
+
+.tab-boton.activo {
+  color: var(--acento);
+  border-bottom-color: var(--acento);
+  font-weight: 600;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.form-campo label {
+  font-size: 0.85rem;
+  color: var(--tenue);
+}
+
+.form-campo input,
+.form-campo textarea,
+.form-campo select {
+  background: #0f1420;
+  border: 1px solid var(--borde);
+  color: var(--texto);
+  padding: 0.55rem 0.8rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.form-campo input:focus,
+.form-campo textarea:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+.tabla-contenedor {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+th {
+  background: #111624;
+  color: var(--tenue);
+  font-weight: 600;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--borde);
+}
+
+td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+}
+
+tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.badge-pendiente {
+  background: rgba(246, 193, 119, 0.15);
+  color: var(--aviso);
+  border: 1px solid var(--aviso);
+}
+
+.badge-aprobada {
+  background: rgba(87, 217, 163, 0.15);
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+
+.badge-rechazada {
+  background: rgba(255, 123, 114, 0.15);
+  color: var(--mal);
+  border: 1px solid var(--mal);
+}
+
+.comentario-caja {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #0d121c;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--tenue);
+  border-left: 3px solid var(--acento);
+}
+
+.tarjeta-solicitud {
+  background: #121824;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+

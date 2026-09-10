@@ -37,33 +37,38 @@ resource "aws_cognito_user_pool_domain" "hosted_ui" {
 }
 
 # Resource Server que define los scopes de la API de negocio
-resource "aws_cognito_resource_server" "productos" {
-  identifier   = "productos"
-  name         = "API de Productos"
+resource "aws_cognito_resource_server" "solicitudes" {
+  identifier   = "solicitudes"
+  name         = "API de Gestion de Solicitudes de Vacaciones"
   user_pool_id = aws_cognito_user_pool.pool.id
 
   scope {
     scope_name        = "read"
-    scope_description = "Consultar inventario de productos"
+    scope_description = "Consultar solicitudes"
   }
 
   scope {
     scope_name        = "write"
-    scope_description = "Crear, modificar y eliminar productos"
+    scope_description = "Crear, modificar y eliminar solicitudes"
+  }
+
+  scope {
+    scope_name        = "approve"
+    scope_description = "Aprobar o rechazar solicitudes"
   }
 }
 
 # Grupos de usuarios que representan los roles del sistema
-resource "aws_cognito_user_group" "lectores" {
-  name         = "lectores"
+resource "aws_cognito_user_group" "solicitantes" {
+  name         = "solicitantes"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Usuarios con permisos de solo lectura (productos/read)"
+  description  = "Usuarios con rol Solicitante (solicitudes/read, solicitudes/write)"
 }
 
-resource "aws_cognito_user_group" "editores" {
-  name         = "editores"
+resource "aws_cognito_user_group" "aprobadores" {
+  name         = "aprobadores"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Usuarios con permisos de lectura y escritura (productos/read y productos/write)"
+  description  = "Usuarios con rol Aprobador (solicitudes/read, solicitudes/approve)"
 }
 
 # Cliente público para la Single Page Application (SPA)
@@ -76,7 +81,8 @@ resource "aws_cognito_user_pool_client" "spa" {
   allowed_oauth_flows                  = ["code"] # Flujo Authorization Code con PKCE
   supported_identity_providers         = ["COGNITO"]
 
-  # REGLA DE SEGURIDAD OBLIGATORIA: Los scopes de negocio (productos/*) NO se declaran aquí;
+  # REGLA DE SEGURIDAD OBLIGATORIA (Perímetro RA1):
+  # Los scopes de negocio (solicitudes/*) NO se declaran aquí;
   # son inyectados exclusivamente por el Lambda Pre-Token V2 según el grupo del usuario.
   allowed_oauth_scopes = [
     "openid",
@@ -105,28 +111,48 @@ resource "aws_cognito_user_pool_client" "spa" {
   }
 
   depends_on = [
-    aws_cognito_resource_server.productos
+    aws_cognito_resource_server.solicitudes
   ]
 }
 
-# Usuario de prueba inicial
-resource "aws_cognito_user" "demo" {
+# 1. Usuario Demo con Rol Solicitante
+resource "aws_cognito_user" "solicitante_demo" {
   user_pool_id = aws_cognito_user_pool.pool.id
-  username     = "alumno@duocuc.cl"
+  username     = "solicitante@duocuc.cl"
   password     = "CloudNative2024"
 
   attributes = {
-    email          = "alumno@duocuc.cl"
+    email          = "solicitante@duocuc.cl"
     email_verified = true
-    name           = "Alumno Demo"
+    name           = "Empleado Solicitante"
   }
 
   message_action = "SUPPRESS"
 }
 
-# Asignación del usuario demo al grupo lectores
-resource "aws_cognito_user_in_group" "demo_lector" {
+resource "aws_cognito_user_in_group" "solicitante_grupo" {
   user_pool_id = aws_cognito_user_pool.pool.id
-  group_name   = aws_cognito_user_group.lectores.name
-  username     = aws_cognito_user.demo.username
+  group_name   = aws_cognito_user_group.solicitantes.name
+  username     = aws_cognito_user.solicitante_demo.username
+}
+
+# 2. Usuario Demo con Rol Aprobador (Jefatura / RRHH)
+resource "aws_cognito_user" "aprobador_demo" {
+  user_pool_id = aws_cognito_user_pool.pool.id
+  username     = "aprobador@duocuc.cl"
+  password     = "CloudNative2024"
+
+  attributes = {
+    email          = "aprobador@duocuc.cl"
+    email_verified = true
+    name           = "Jefatura Aprobador"
+  }
+
+  message_action = "SUPPRESS"
+}
+
+resource "aws_cognito_user_in_group" "aprobador_grupo" {
+  user_pool_id = aws_cognito_user_pool.pool.id
+  group_name   = aws_cognito_user_group.aprobadores.name
+  username     = aws_cognito_user.aprobador_demo.username
 }
