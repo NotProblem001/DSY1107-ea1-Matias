@@ -38,22 +38,107 @@ jobs:
       - name: Dar permisos de ejecución a los scripts
         run: chmod +x scripts/*.sh || true
 
+      - name: Configurar credenciales de AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || env.REGION_DEFAULT }}
+
       - name: Generar o inyectar config.json
         env:
           REGION: ${{ vars.AWS_REGION || env.REGION_DEFAULT }}
-          COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
-          CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
-          REDIRECT_URI: ${{ vars.REDIRECT_URI }}
-          API_URL: ${{ vars.API_URL }}
-          EXIGIR_HTTPS: '0'
+          COGNITO_DOMAIN_VAR: ${{ vars.COGNITO_DOMAIN }}
+          CLIENT_ID_VAR: ${{ vars.COGNITO_CLIENT_ID }}
+          REDIRECT_URI_VAR: ${{ vars.REDIRECT_URI }}
+          API_URL_VAR: ${{ vars.API_URL }}
+          APP_ID_VAR: ${{ vars.AMPLIFY_APP_ID }}
+          RAMA: ${{ vars.AMPLIFY_BRANCH || 'main' }}
         run: |
-          if [ -n "$COGNITO_DOMAIN" ] && [ -n "$CLIENT_ID" ] && [ -n "$REDIRECT_URI" ]; then
+          set -euo pipefail
+          echo "==> Resolviendo configuración de AWS para el frontend..."
+
+          APP_ID="$APP_ID_VAR"
+          if [ -z "$APP_ID" ]; then
+            echo "Buscando APP_ID existente en AWS Amplify..."
+            APP_ID=$(aws amplify list-apps --query "apps[?name=='dsy1107-Matias-Araos'].appId" --output text 2>/dev/null || true)
+            if [ -z "$APP_ID" ] || [ "$APP_ID" = "None" ]; then
+              APP_ID=$(aws amplify list-apps --query "apps[0].appId" --output text 2>/dev/null || true)
+            fi
+          fi
+          echo "Amplify APP_ID: $APP_ID"
+
+          REDIRECT_URI="$REDIRECT_URI_VAR"
+          if [ -z "$REDIRECT_URI" ]; then
+            if [ -n "$APP_ID" ] && [ "$APP_ID" != "None" ]; then
+              DEFAULT_DOMAIN=$(aws amplify get-app --app-id "$APP_ID" --query "app.defaultDomain" --output text 2>/dev/null || true)
+              if [ -n "$DEFAULT_DOMAIN" ] && [ "$DEFAULT_DOMAIN" != "None" ]; then
+                REDIRECT_URI="https://${RAMA}.${DEFAULT_DOMAIN}/"
+              else
+                REDIRECT_URI="https://${RAMA}.${APP_ID}.amplifyapp.com/"
+              fi
+            else
+              REDIRECT_URI="http://localhost:5173/"
+            fi
+          fi
+          echo "Redirect URI: $REDIRECT_URI"
+
+          CLIENT_ID="$CLIENT_ID_VAR"
+          COGNITO_DOMAIN="$COGNITO_DOMAIN_VAR"
+          if [ -z "$CLIENT_ID" ] || [ -z "$COGNITO_DOMAIN" ]; then
+            echo "Consultando Cognito User Pools..."
+            POOL_ID=$(aws cognito-idp list-user-pools --max-results 20 --query "UserPools[?name=='dsy1107-matias-araos'].Id" --output text 2>/dev/null || true)
+            if [ -z "$POOL_ID" ] || [ "$POOL_ID" = "None" ]; then
+              POOL_ID=$(aws cognito-idp list-user-pools --max-results 20 --query "UserPools[?contains(name, 'dsy1107')].Id" --output text 2>/dev/null || true)
+            fi
+            echo "Cognito User Pool ID: $POOL_ID"
+
+            if [ -n "$POOL_ID" ] && [ "$POOL_ID" != "None" ]; then
+              if [ -z "$CLIENT_ID" ]; then
+                CLIENT_ID=$(aws cognito-idp list-user-pool-clients --user-pool-id "$POOL_ID" --query "UserPoolClients[?ClientName=='spa-react'].ClientId" --output text 2>/dev/null || true)
+                if [ -z "$CLIENT_ID" ] || [ "$CLIENT_ID" = "None" ]; then
+                  CLIENT_ID=$(aws cognito-idp list-user-pool-clients --user-pool-id "$POOL_ID" --query "UserPoolClients[0].ClientId" --output text 2>/dev/null || true)
+                fi
+              fi
+              if [ -z "$COGNITO_DOMAIN" ]; then
+                DOMAIN_PREFIX=$(aws cognito-idp describe-user-pool --user-pool-id "$POOL_ID" --query "UserPool.Domain" --output text 2>/dev/null || true)
+                if [ -n "$DOMAIN_PREFIX" ] && [ "$DOMAIN_PREFIX" != "None" ]; then
+                  COGNITO_DOMAIN="https://${DOMAIN_PREFIX}.auth.${REGION}.amazoncognito.com"
+                else
+                  COGNITO_DOMAIN="https://dsy1107-matias-araos.auth.${REGION}.amazoncognito.com"
+                fi
+              fi
+            fi
+          fi
+          echo "Cognito Domain: $COGNITO_DOMAIN"
+          echo "Cognito Client ID: $CLIENT_ID"
+
+          API_URL="$API_URL_VAR"
+          if [ -z "$API_URL" ]; then
+            echo "Consultando API Gateway v2..."
+            API_URL=$(aws apigatewayv2 get-apis --query "Items[?contains(Name, 'api-manager')].ApiEndpoint" --output text 2>/dev/null || true)
+            if [ -z "$API_URL" ] || [ "$API_URL" = "None" ]; then
+              API_URL=$(aws apigatewayv2 get-apis --query "Items[0].ApiEndpoint" --output text 2>/dev/null || true)
+            fi
+          fi
+          echo "API Gateway URL: $API_URL"
+
+          export REGION COGNITO_DOMAIN CLIENT_ID REDIRECT_URI API_URL EXIGIR_HTTPS=0
+          if [ -n "$COGNITO_DOMAIN" ] && [ -n "$CLIENT_ID" ] && [ "$CLIENT_ID" != "None" ] && [ -n "$REDIRECT_URI" ] && [ -n "$API_URL" ] && [ "$API_URL" != "None" ]; then
+            echo "Inyectando configuración real en frontend/public/config.json..."
             scripts/config-frontend.sh
           else
-            echo "Aviso: Variables completas de Cognito no detectadas en GitHub Actions. Usando config.example.json..."
+            echo "::warning::No se resolvieron todas las variables. Usando fallback..."
             mkdir -p frontend/public
             cp frontend/public/config.example.json frontend/public/config.json || true
           fi
+
+          echo "APP_ID_FINAL=$APP_ID" >> "$GITHUB_ENV"
+          echo "REDIRECT_URI_FINAL=$REDIRECT_URI" >> "$GITHUB_ENV"
+          echo "COGNITO_DOMAIN_FINAL=$COGNITO_DOMAIN" >> "$GITHUB_ENV"
+          echo "CLIENT_ID_FINAL=$CLIENT_ID" >> "$GITHUB_ENV"
+          echo "API_URL_FINAL=$API_URL" >> "$GITHUB_ENV"
 
       - name: Instalar dependencias
         working-directory: frontend
@@ -63,21 +148,13 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Configurar credenciales de AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ vars.AWS_REGION || env.REGION_DEFAULT }}
-
       - name: Desplegar en AWS Amplify
         env:
-          APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+          APP_ID: ${{ env.APP_ID_FINAL || vars.AMPLIFY_APP_ID }}
           RAMA: ${{ vars.AMPLIFY_BRANCH || 'main' }}
         run: |
           set -euo pipefail
-          if [ -z "$APP_ID" ]; then
+          if [ -z "$APP_ID" ] || [ "$APP_ID" = "None" ]; then
             echo "Buscando APP_ID existente en AWS Amplify..."
             APP_ID=$(aws amplify list-apps --query "apps[?name=='dsy1107-Matias-Araos'].appId" --output text || true)
             if [ -z "$APP_ID" ] || [ "$APP_ID" = "None" ]; then
@@ -92,7 +169,6 @@ jobs:
 
           echo "Publicando en Amplify App ID: $APP_ID, Rama: $RAMA desde $RUTA_BUILD"
           scripts/publicar-amplify.sh "$APP_ID" "$RAMA" "$RUTA_BUILD"
-          echo "APP_ID_FINAL=$APP_ID" >> "$GITHUB_ENV"
 
       - name: Resumen
         if: always()
@@ -102,5 +178,8 @@ jobs:
             echo ""
             echo "- **App ID**: \`${APP_ID_FINAL:-No resuelto}\`"
             echo "- **Directorio publicado**: \`${RUTA_BUILD}\`"
-            echo "- **URL esperada**: ${REDIRECT_URI:-Revisar consola de AWS Amplify}"
+            echo "- **Cognito Domain**: \`${COGNITO_DOMAIN_FINAL:-No resuelto}\`"
+            echo "- **Cognito Client ID**: \`${CLIENT_ID_FINAL:-No resuelto}\`"
+            echo "- **Redirect URI**: \`${REDIRECT_URI_FINAL:-No resuelto}\`"
+            echo "- **API URL**: \`${API_URL_FINAL:-No resuelto}\`"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -93,11 +93,15 @@ resource "aws_cognito_user_pool_client" "spa" {
 
   callback_urls = [
     "http://localhost:5173/",
-    "${local.url_amplify}/"
+    "http://localhost:5173",
+    "${local.url_amplify}/",
+    local.url_amplify
   ]
   logout_urls = [
     "http://localhost:5173/",
-    "${local.url_amplify}/"
+    "http://localhost:5173",
+    "${local.url_amplify}/",
+    local.url_amplify
   ]
 
   explicit_auth_flows = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]

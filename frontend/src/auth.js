@@ -25,14 +25,24 @@ export async function cargarConfiguracion() {
     const respuesta = await fetch('/config.json', { cache: 'no-store' })
     if (respuesta.ok) {
       const json = await respuesta.json()
-      if (json.cognitoDomain) runtimeConfig.domain = json.cognitoDomain
-      if (json.clientId) runtimeConfig.clientId = json.clientId
-      if (json.redirectUri) runtimeConfig.redirectUri = json.redirectUri
-      if (json.apiUrl) runtimeConfig.apiUrl = json.apiUrl
+      if (json.cognitoDomain && !json.cognitoDomain.includes('example')) runtimeConfig.domain = json.cognitoDomain
+      if (json.clientId && !json.clientId.includes('example')) runtimeConfig.clientId = json.clientId
+      if (json.redirectUri && (!json.redirectUri.includes('localhost') || window.location.hostname === 'localhost')) {
+        runtimeConfig.redirectUri = json.redirectUri
+      }
+      if (json.apiUrl && !json.apiUrl.includes('exampleapi')) runtimeConfig.apiUrl = json.apiUrl
     }
   } catch {
     // Si falla, se conservan los valores inyectados por Vite (import.meta.env)
   }
+
+  // Si estamos en un hosting remoto (ej. AWS Amplify) y el redirectUri apunta a localhost, ajustarlo al origen actual
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    if (!runtimeConfig.redirectUri || runtimeConfig.redirectUri.includes('localhost')) {
+      runtimeConfig.redirectUri = `${window.location.origin}/`
+    }
+  }
+
   return runtimeConfig
 }
 
@@ -198,8 +208,9 @@ function limpiarUrl() {
 
 export function configIncompleta() {
   const faltantes = []
-  if (!config.domain) faltantes.push('VITE_COGNITO_DOMAIN o cognitoDomain')
-  if (!config.clientId) faltantes.push('VITE_COGNITO_CLIENT_ID o clientId')
+  if (!config.domain || config.domain.includes('example')) faltantes.push('VITE_COGNITO_DOMAIN o cognitoDomain')
+  if (!config.clientId || config.clientId.includes('example')) faltantes.push('VITE_COGNITO_CLIENT_ID o clientId')
   if (!config.redirectUri) faltantes.push('VITE_REDIRECT_URI o redirectUri')
+  if (!config.apiUrl || config.apiUrl.includes('exampleapi')) faltantes.push('VITE_API_BASE o apiUrl')
   return faltantes
 }
