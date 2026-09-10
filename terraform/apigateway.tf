@@ -3,6 +3,7 @@ resource "aws_apigatewayv2_api" "api_manager" {
   name          = "api-manager-${lower(var.estudiante)}"
   protocol_type = "HTTP"
 
+  # CORS configurado SIN barra final en los orígenes permitidos
   cors_configuration {
     allow_origins = [
       "http://localhost:5173",
@@ -30,7 +31,7 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 # Integraciones HTTP Proxy hacia el Backend en ECS Fargate
 # ignore_changes en integration_uri es indispensable: la IP de la task Fargate
 # cambia en cada despliegue y los scripts (publicar-ecs.sh / backend_deploy.yml)
-# la actualizan dinamicamente.
+# la actualizan dinámicamente sin pisar la infraestructura de Terraform.
 resource "aws_apigatewayv2_integration" "backend_datos" {
   api_id                 = aws_apigatewayv2_api.api_manager.id
   integration_type       = "HTTP_PROXY"
@@ -79,9 +80,9 @@ resource "aws_apigatewayv2_integration" "backend_publico" {
   }
 }
 
-# --- Rutas Protegidas y Publicas ---
+# --- Rutas Protegidas y Públicas ---
 
-# 1. Ruta publica sin autorizador (para contraste)
+# 1. Ruta pública sin autorizador (para contraste)
 resource "aws_apigatewayv2_route" "publico" {
   api_id    = aws_apigatewayv2_api.api_manager.id
   route_key = "GET /publico/datos"
@@ -90,11 +91,11 @@ resource "aws_apigatewayv2_route" "publico" {
 
 # 2. Ruta protegida con scope base openid
 resource "aws_apigatewayv2_route" "datos" {
-  api_id             = aws_apigatewayv2_api.api_manager.id
-  route_key          = "GET /datos"
-  target             = "integrations/${aws_apigatewayv2_integration.backend_datos.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  api_id               = aws_apigatewayv2_api.api_manager.id
+  route_key            = "GET /datos"
+  target               = "integrations/${aws_apigatewayv2_integration.backend_datos.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
   authorization_scopes = ["openid"]
 }
 

@@ -1,9 +1,8 @@
-resource "aws_amplify_app" "front" {
-  name = "dsy1107-Matias-Araos"
-  # WEB = sitio estatico. El build de Angular son archivos,
-  # no un servidor que haya que arrancar.
+﻿resource "aws_amplify_app" "front" {
+  name     = "dsy1107-${var.estudiante}"
   platform = "WEB"
 
+  # Regla de reescritura para SPA: redirige rutas a /index.html sin atrapar archivos estáticos ni /config.json
   custom_rule {
     source = "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>"
     target = "/index.html"
@@ -20,14 +19,4 @@ resource "aws_amplify_branch" "main" {
 
 locals {
   url_amplify = "https://${aws_amplify_branch.main.branch_name}.${aws_amplify_app.front.default_domain}"
-}
-
-output "amplify_app_id" {
-  description = "Lo necesita aws amplify create-deployment"
-  value       = aws_amplify_app.front.id
-}
-
-output "amplify_url" {
-  description = "Va en callback_urls, logout_urls y CORS"
-  value       = local.url_amplify
 }

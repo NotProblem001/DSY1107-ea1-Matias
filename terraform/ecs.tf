@@ -10,10 +10,27 @@ data "aws_subnets" "default" {
   }
 }
 
-# Repositorio ECR para alojar las imagenes del microservicio backend
+# Internet Gateway asociado a la VPC por defecto
+data "aws_internet_gateway" "default" {
+  filter {
+    name   = "attachment.vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+# Ruta obligatoria de salida a internet (0.0.0.0/0) en la tabla de ruteo de la VPC por defecto
+# Imprescindible para que las tareas Fargate con IP pública puedan descargar imágenes desde ECR sin timeout
+resource "aws_route" "salida_a_internet" {
+  route_table_id         = data.aws_vpc.default.main_route_table_id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = data.aws_internet_gateway.default.id
+}
+
+# Repositorio ECR para alojar las imágenes del microservicio backend
 resource "aws_ecr_repository" "backend" {
   name                 = "dsy1107-backend-${lower(var.estudiante)}"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -31,14 +48,14 @@ resource "aws_cloudwatch_log_group" "ecs" {
   retention_in_days = 7
 }
 
-# Security Group con puerto 8080 abierto para el trafico reenviado desde API Gateway
+# Security Group con puerto 8080 abierto para peticiones reenviadas desde API Gateway
 resource "aws_security_group" "ecs_task" {
   name        = "dsy1107-ecs-task-${lower(var.estudiante)}"
   description = "Permite trafico HTTP al backend en puerto 8080"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "Acceso HTTP a Spring Boot"
+    description = "Acceso HTTP a Spring Boot desde API Gateway"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
@@ -46,7 +63,7 @@ resource "aws_security_group" "ecs_task" {
   }
 
   egress {
-    description = "Salida a internet para descargar dependencias o llamadas externas"
+    description = "Salida total a internet para ECR y llamadas externas"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -54,15 +71,16 @@ resource "aws_security_group" "ecs_task" {
   }
 }
 
-# Definicion de Tarea Fargate (linux/amd64 - Java 21)
+# Definición de Tarea ECS Fargate (linux/amd64 - Java 21)
 resource "aws_ecs_task_definition" "backend" {
   family                   = "dsy1107-backend-${lower(var.estudiante)}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
   memory                   = "512"
-  execution_role_arn       = data.aws_iam_role.lab_role.arn
-  task_role_arn            = data.aws_iam_role.lab_role.arn
+  # ARN del rol resuelto dinámicamente según la cuenta activa de AWS Academy
+  execution_role_arn       = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
+  task_role_arn            = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
 
   runtime_platform {
     operating_system_family = "LINUX"
@@ -85,7 +103,7 @@ resource "aws_ecs_task_definition" "backend" {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
-          "awslogs-region"        = var.aws_region
+          "awslogs-region"        = data.aws_region.current.name
           "awslogs-stream-prefix" = "ecs"
         }
       }
@@ -94,8 +112,7 @@ resource "aws_ecs_task_definition" "backend" {
 }
 
 # Servicio ECS Fargate
-# ignore_changes = [task_definition] es FUNDAMENTAL para convivir con los pipelines de CI/CD:
-# GitHub Actions (backend_deploy.yml) y publicar-ecs.sh actualizan la revision de la tarea con cada imagen nueva.
+# ignore_changes = [task_definition] es indispensable para convivir con los pipelines de CI/CD (backend_deploy.yml)
 resource "aws_ecs_service" "backend" {
   name            = "dsy1107-backend-${lower(var.estudiante)}"
   cluster         = aws_ecs_cluster.backend.id
@@ -112,4 +129,8 @@ resource "aws_ecs_service" "backend" {
   lifecycle {
     ignore_changes = [task_definition]
   }
+
+  depends_on = [
+    aws_route.salida_a_internet
+  ]
 }
