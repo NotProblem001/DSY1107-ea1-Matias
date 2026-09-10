@@ -9,7 +9,7 @@ data "archive_file" "user_token_ms" {
 resource "aws_lambda_function" "user_token_ms" {
   function_name = "user-token-ms-${lower(var.estudiante)}"
   # ARN del rol resuelto dinámicamente según la cuenta activa de AWS Academy
-  role             = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
+  role             = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/LabRole"
   runtime          = "nodejs22.x"
   handler          = "index.handler"
   filename         = data.archive_file.user_token_ms.output_path

@@ -18,12 +18,28 @@ data "aws_internet_gateway" "default" {
   }
 }
 
-# Ruta obligatoria de salida a internet (0.0.0.0/0) en la tabla de ruteo de la VPC por defecto
-# Imprescindible para que las tareas Fargate con IP pública puedan descargar imágenes desde ECR sin timeout
+# Tabla de ruteo pública para el microservicio backend en la VPC por defecto
+resource "aws_route_table" "publica" {
+  vpc_id = data.aws_vpc.default.id
+
+  tags = {
+    Name = "dsy1107-rt-${lower(var.estudiante)}"
+  }
+}
+
+# Ruta obligatoria de salida a internet (0.0.0.0/0) hacia el Internet Gateway
+# Se declara sobre la tabla de ruteo propia para evitar el error RouteAlreadyExists de la VPC por defecto
 resource "aws_route" "salida_a_internet" {
-  route_table_id         = data.aws_vpc.default.main_route_table_id
+  route_table_id         = aws_route_table.publica.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = data.aws_internet_gateway.default.id
+}
+
+# Asociación de las subredes a la tabla de ruteo con salida a internet
+resource "aws_route_table_association" "publica" {
+  for_each       = toset(data.aws_subnets.default.ids)
+  subnet_id      = each.value
+  route_table_id = aws_route_table.publica.id
 }
 
 # Repositorio ECR para alojar las imágenes del microservicio backend
@@ -79,8 +95,8 @@ resource "aws_ecs_task_definition" "backend" {
   cpu                      = "256"
   memory                   = "512"
   # ARN del rol resuelto dinámicamente según la cuenta activa de AWS Academy
-  execution_role_arn = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
-  task_role_arn      = "arn:aws:iam://${data.aws_caller_identity.current.account_id}:role/LabRole"
+  execution_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/LabRole"
+  task_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/LabRole"
 
   runtime_platform {
     operating_system_family = "LINUX"
