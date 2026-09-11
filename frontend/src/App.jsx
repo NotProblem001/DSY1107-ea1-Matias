@@ -198,41 +198,12 @@ export default function App() {
             No hay sesión activa. Para interactuar con el sistema puedes iniciar el flujo <strong>Authorization Code con PKCE</strong> mediante el Hosted UI de Cognito o probar el acceso público.
           </p>
 
-          {/* Matriz de los 3 Perfiles Demo */}
-          <div style={{ marginTop: '1.25rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 0.75rem', color: 'var(--texto)' }}>
-              Matriz de Roles y Scopes en Pedidos360:
+          {/* Cuadro de Cuentas Demo Precargadas para Evaluación */}
+          <div className="info-box" style={{ background: '#131826', border: '1px solid var(--acento)', borderRadius: '8px', padding: '1.25rem', marginTop: '1.25rem', marginBottom: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 0.75rem', color: 'var(--acento)', fontSize: '1.05rem', fontWeight: 600 }}>
+              Cuentas demo precargadas para evaluación:
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-              {/* Perfil 1: Lector */}
-              <div style={{ background: '#131825', border: '1px solid var(--borde)', borderRadius: '8px', padding: '1rem' }}>
-                <span className="badge badge-aviso">1. Lector</span>
-                <p style={{ fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                  <strong>Solo Lectura:</strong> <code>lector@pedidos360.com</code> (Grupo <code>lectores</code> &rarr; Scope <code>solicitudes/read</code>). Puede consultar pedidos. Bloqueado para crear y aprobar.
-                </p>
-              </div>
-
-              {/* Perfil 2: Cliente */}
-              <div style={{ background: '#131825', border: '1px solid var(--borde)', borderRadius: '8px', padding: '1rem' }}>
-                <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>2. Cliente</span>
-                <p style={{ fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                  <strong>Lectura y Creación:</strong> <code>cliente@pedidos360.com</code> (Grupo <code>clientes</code> &rarr; Scopes <code>solicitudes/read</code>, <code>solicitudes/write</code>). Puede registrar nuevos pedidos.
-                </p>
-              </div>
-
-              {/* Perfil 3: Editor */}
-              <div style={{ background: '#131825', border: '1px solid var(--borde)', borderRadius: '8px', padding: '1rem' }}>
-                <span className="badge badge-ok">3. Editor</span>
-                <p style={{ fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                  <strong>Lectura y Aprobación:</strong> <code>editor@pedidos360.com</code> (Grupo <code>editores</code> &rarr; Scopes <code>solicitudes/read</code>, <code>solicitudes/approve</code>). Puede aprobar y cambiar estados.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="info-box">
-            <strong>Cuentas demo precargadas para evaluación (Contraseña: <code>Pedidos360!</code>):</strong>
-            <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
+            <ul style={{ margin: '0 0 0.85rem', paddingLeft: '1.25rem', lineHeight: '1.8' }}>
               <li>
                 <strong>Lector:</strong> <code>lector@pedidos360.com</code> (Grupo: <code>lectores</code> &rarr; Scopes: <code>solicitudes/read</code>)
               </li>
@@ -243,6 +214,9 @@ export default function App() {
                 <strong>Editor:</strong> <code>editor@pedidos360.com</code> (Grupo: <code>editores</code> &rarr; Scopes: <code>solicitudes/read</code>, <code>solicitudes/approve</code>)
               </li>
             </ul>
+            <div style={{ fontSize: '0.88rem', color: 'var(--tenue)', borderTop: '1px solid var(--borde)', paddingTop: '0.65rem' }}>
+              🔑 <strong>Contraseña para todas las cuentas:</strong> <code>Pedidos360!</code>
+            </div>
           </div>
 
           <div className="acciones">
@@ -355,6 +329,22 @@ export default function App() {
                 )}
               </dd>
             </dl>
+
+            <details style={{ marginTop: '1rem', background: '#121725', border: '1px solid var(--borde)', borderRadius: '6px', padding: '0.6rem 0.85rem' }}>
+              <summary style={{ cursor: 'pointer', color: 'var(--acento)', fontWeight: 500 }}>
+                📋 Ver cuentas demo precargadas para evaluación
+              </summary>
+              <div style={{ marginTop: '0.6rem', fontSize: '0.85rem' }}>
+                <ul style={{ margin: 0, paddingLeft: '1.25rem', lineHeight: '1.7' }}>
+                  <li><strong>Lector:</strong> <code>lector@pedidos360.com</code> (Grupo: <code>lectores</code> &rarr; Scopes: <code>solicitudes/read</code>)</li>
+                  <li><strong>Cliente:</strong> <code>cliente@pedidos360.com</code> (Grupo: <code>clientes</code> &rarr; Scopes: <code>solicitudes/read</code>, <code>solicitudes/write</code>)</li>
+                  <li><strong>Editor:</strong> <code>editor@pedidos360.com</code> (Grupo: <code>editores</code> &rarr; Scopes: <code>solicitudes/read</code>, <code>solicitudes/approve</code>)</li>
+                </ul>
+                <div style={{ marginTop: '0.4rem', color: 'var(--tenue)' }}>
+                  🔑 Contraseña para todas: <code>Pedidos360!</code>
+                </div>
+              </div>
+            </details>
 
             <div className="acciones">
               {tokens.refresh_token && (
