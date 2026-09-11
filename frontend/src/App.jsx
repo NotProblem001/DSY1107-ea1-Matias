@@ -62,6 +62,7 @@ export default function App() {
   const emailUsuario = idClaims?.email ?? idClaims?.['cognito:username'] ?? ''
   const gruposUsuario = idClaims?.['cognito:groups'] || []
   const scopesTokens = accessClaims?.scope ? accessClaims.scope.split(' ') : []
+  const puedeEscribir = scopesTokens.includes('pedidos/write')
 
   // Determinación de los 3 tipos de usuarios del sistema
   const esAdmin = scopesTokens.includes('pedidos/write') || gruposUsuario.includes('administradores') || gruposUsuario.includes('editores')
