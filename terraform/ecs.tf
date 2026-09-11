@@ -87,13 +87,13 @@ resource "aws_security_group" "ecs_task" {
   }
 }
 
-# Definición de Tarea ECS Fargate (linux/amd64 - Java 21)
+# Definición de Tarea ECS Fargate (linux/amd64 - 512 CPU, 1024 RAM - Java 21)
 resource "aws_ecs_task_definition" "backend" {
   family                   = "dsy1107-backend-${lower(var.estudiante)}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   # ARN del rol resuelto dinámicamente según la cuenta activa de AWS Academy
   execution_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/LabRole"
   task_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/LabRole"
@@ -113,6 +113,20 @@ resource "aws_ecs_task_definition" "backend" {
           containerPort = 8080
           hostPort      = 8080
           protocol      = "tcp"
+        }
+      ]
+      environment = [
+        {
+          name  = "SPRING_APPLICATION_NAME"
+          value = "backend-pedidos360"
+        },
+        {
+          name  = "COGNITO_ISSUER_URI"
+          value = "https://${aws_cognito_user_pool.pool.endpoint}"
+        },
+        {
+          name  = "COGNITO_JWK_SET_URI"
+          value = "https://${aws_cognito_user_pool.pool.endpoint}/.well-known/jwks.json"
         }
       ]
       logConfiguration = {

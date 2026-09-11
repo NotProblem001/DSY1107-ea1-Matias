@@ -1,22 +1,30 @@
 /**
  * Cognito Pre Token Generation V2 Trigger
  *
- * Mapea los grupos de Cognito (solicitantes, aprobadores) a scopes de negocio
- * en el access token usando claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd.
+ * Mapea dinámicamente los grupos de Cognito del usuario a scopes de negocio en el access token
+ * usando claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd.
+ *
+ * Grupos:
+ * - lectores / clientes -> pedidos/read
+ * - editores / administradores -> pedidos/read, pedidos/write
  */
 export async function handler(event) {
   const groups = event.request?.groupConfiguration?.groupsToOverride || [];
   const scopesToAdd = [];
 
-  if (groups.includes('solicitantes')) {
-    scopesToAdd.push('solicitudes/read', 'solicitudes/write');
+  const esLector = groups.includes('lectores') || groups.includes('clientes');
+  const esEditor = groups.includes('editores') || groups.includes('administradores');
+
+  if (esLector || esEditor) {
+    if (!scopesToAdd.includes('pedidos/read')) {
+      scopesToAdd.push('pedidos/read');
+    }
   }
 
-  if (groups.includes('aprobadores')) {
-    if (!scopesToAdd.includes('solicitudes/read')) {
-      scopesToAdd.push('solicitudes/read');
+  if (esEditor) {
+    if (!scopesToAdd.includes('pedidos/write')) {
+      scopesToAdd.push('pedidos/write');
     }
-    scopesToAdd.push('solicitudes/approve');
   }
 
   event.response = {
@@ -29,3 +37,4 @@ export async function handler(event) {
 
   return event;
 }
+

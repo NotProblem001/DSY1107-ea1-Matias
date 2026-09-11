@@ -14,8 +14,9 @@ public class DatosController {
     @GetMapping("/datos")
     public ResponseEntity<Map<String, Object>> obtenerDatosProtegidos() {
         Map<String, Object> data = new HashMap<>();
+        data.put("sistema", "Pedidos360");
         data.put("timestamp", LocalDateTime.now().toString());
-        data.put("mensaje", "Datos económicos y de indicadores del sistema");
+        data.put("mensaje", "Datos e indicadores económicos de la plataforma Pedidos360");
         data.put("estado", "OK");
         data.put("autorizado", true);
         data.put("indicadores", Map.of(
@@ -30,8 +31,9 @@ public class DatosController {
     @GetMapping("/publico/datos")
     public ResponseEntity<Map<String, Object>> obtenerDatosPublicos() {
         Map<String, Object> data = new HashMap<>();
+        data.put("sistema", "Pedidos360");
         data.put("timestamp", LocalDateTime.now().toString());
-        data.put("mensaje", "Ruta pública de demostración y contraste (sin autenticación)");
+        data.put("mensaje", "Ruta pública de demostración y contraste de Pedidos360 (sin autenticación)");
         data.put("estado", "OK");
         data.put("autorizado", false);
         return ResponseEntity.ok(data);

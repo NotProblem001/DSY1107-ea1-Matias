@@ -12,13 +12,12 @@ import {
   tokenVencido,
 } from './auth.js'
 import {
-  obtenerInfoPublica,
-  obtenerSolicitudes,
-  crearSolicitud,
-  actualizarSolicitud,
-  eliminarSolicitud,
-  aprobarSolicitud,
-  rechazarSolicitud,
+  obtenerDatosPublicos,
+  obtenerDatosProtegidos,
+  obtenerPedidos,
+  crearPedido,
+  actualizarPedido,
+  eliminarPedido,
   probarSinToken,
 } from './api.js'
 
@@ -30,19 +29,17 @@ export default function App() {
   const [resultadoApi, setResultadoApi] = useState(null)
   const [cargando, setCargando] = useState(false)
   const [configCargada, setConfigCargada] = useState(false)
-  const [pestanaActiva, setPestanaActiva] = useState('solicitante') // 'solicitante', 'aprobador', 'seguridad'
+  const [pestanaActiva, setPestanaActiva] = useState('pedidos') // 'pedidos', 'seguridad', 'tokens'
 
-  // Estado de solicitudes en la UI
-  const [solicitudes, setSolicitudes] = useState([])
-  const [formNueva, setFormNueva] = useState({
-    fechaInicio: '2026-03-01',
-    fechaFin: '2026-03-12',
-    dias: 10,
-    motivo: 'Vacaciones de descanso anual',
+  // Estado de pedidos en la UI
+  const [pedidos, setPedidos] = useState([])
+  const [formNuevo, setFormNuevo] = useState({
+    descripcion: 'Laptop Dell XPS 15 - 32GB RAM / 1TB SSD',
+    monto: 1899990,
+    estado: 'PENDIENTE',
   })
-  const [comentariosRevision, setComentariosRevision] = useState({})
 
-  // Inicializar configuración
+  // Inicializar configuración al montar
   useEffect(() => {
     cargarConfiguracion().then(() => setConfigCargada(true))
   }, [])
@@ -66,22 +63,22 @@ export default function App() {
   const gruposUsuario = idClaims?.['cognito:groups'] || []
   const scopesTokens = accessClaims?.scope ? accessClaims.scope.split(' ') : []
 
-  // Cargar solicitudes cuando haya token
-  async function cargarListaSolicitudes() {
+  // Cargar pedidos cuando haya token
+  async function cargarListaPedidos() {
     if (!tokens?.access_token) return
     try {
-      const res = await obtenerSolicitudes(tokens.access_token)
+      const res = await obtenerPedidos(tokens.access_token)
       if (Array.isArray(res.data)) {
-        setSolicitudes(res.data)
+        setPedidos(res.data)
       }
     } catch {
-      // Si falla por 403 o 401 se maneja en las acciones de prueba
+      // Los errores se capturan en el visor de resultados
     }
   }
 
   useEffect(() => {
     if (tokens?.access_token) {
-      cargarListaSolicitudes()
+      cargarListaPedidos()
     }
   }, [tokens])
 
@@ -99,7 +96,7 @@ export default function App() {
         data: res.data,
       })
       if (recargar) {
-        await cargarListaSolicitudes()
+        await cargarListaPedidos()
       }
     } catch (err) {
       if (err.detalle) {
@@ -118,34 +115,29 @@ export default function App() {
     }
   }
 
-  async function handleCrearSolicitud(e) {
+  async function handleCrearPedido(e) {
     e.preventDefault()
     if (!tokens?.access_token) return
     const payload = {
-      solicitanteEmail: emailUsuario || 'solicitante@duocuc.cl',
-      fechaInicio: formNueva.fechaInicio,
-      fechaFin: formNueva.fechaFin,
-      dias: Number(formNueva.dias),
-      motivo: formNueva.motivo,
+      clienteEmail: emailUsuario || 'cliente@pedidos360.com',
+      descripcion: formNuevo.descripcion,
+      monto: Number(formNuevo.monto),
+      estado: formNuevo.estado || 'PENDIENTE',
     }
-    await ejecutarAccion('Crear Solicitud de Vacaciones (POST)', () => crearSolicitud(tokens.access_token, payload), true)
+    await ejecutarAccion('Crear Pedido (POST /pedidos)', () => crearPedido(tokens.access_token, payload), true)
   }
 
-  async function handleAprobar(id) {
-    const comentario = comentariosRevision[id] || 'Aprobado según disponibilidad del equipo.'
-    await ejecutarAccion(`Aprobar Solicitud #${id} (POST)`, () =>
-      aprobarSolicitud(tokens.access_token, id, { comentario, aprobadorEmail: emailUsuario }), true)
-  }
-
-  async function handleRechazar(id) {
-    const comentario = comentariosRevision[id] || 'Rechazado por tope de fechas con otros miembros.'
-    await ejecutarAccion(`Rechazar Solicitud #${id} (POST)`, () =>
-      rechazarSolicitud(tokens.access_token, id, { comentario, aprobadorEmail: emailUsuario }), true)
+  async function handleCambiarEstado(id, nuevoEstado) {
+    const pedido = pedidos.find(p => p.id === id)
+    if (!pedido) return
+    const payload = { ...pedido, estado: nuevoEstado }
+    await ejecutarAccion(`Actualizar Pedido #${id} a ${nuevoEstado} (PUT /pedidos/${id})`, () =>
+      actualizarPedido(tokens.access_token, id, payload), true)
   }
 
   async function handleEliminar(id) {
-    if (!window.confirm(`¿Deseas eliminar la solicitud #${id}?`)) return
-    await ejecutarAccion(`Eliminar Solicitud #${id} (DELETE)`, () => eliminarSolicitud(tokens.access_token, id), true)
+    if (!window.confirm(`¿Deseas eliminar el pedido #${id}?`)) return
+    await ejecutarAccion(`Eliminar Pedido #${id} (DELETE /pedidos/${id})`, () => eliminarPedido(tokens.access_token, id), true)
   }
 
   async function renovarSesion() {
@@ -176,9 +168,9 @@ export default function App() {
   return (
     <main>
       <header>
-        <h1>DSY1107 · Gestión de Solicitudes de Vacaciones</h1>
+        <h1>Pedidos360 · Plataforma Cloud Native</h1>
         <p className="sub">
-          Arquitectura Cloud Native · Seguridad Perimetral con AWS Cognito IDaaS + API Gateway Scope Guard
+          DSY1107 (EA1 / RA1) · Seguridad Perimetral con AWS Cognito IDaaS + API Gateway Scope Guards + Spring Boot ECS Fargate
         </p>
       </header>
 
@@ -190,7 +182,7 @@ export default function App() {
 
       {!tokens ? (
         <section>
-          <h2>Iniciar Sesión con Cognito</h2>
+          <h2>Iniciar Sesión con Amazon Cognito IDaaS</h2>
           <p>
             No hay sesión activa. Al pulsar el botón se iniciará el flujo <strong>Authorization Code con PKCE</strong> mediante el Hosted UI de Cognito.
           </p>
@@ -198,10 +190,10 @@ export default function App() {
             <strong>Cuentas demo precargadas para evaluación:</strong>
             <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
               <li>
-                <strong>Solicitante:</strong> <code>solicitante@duocuc.cl</code> / <code>CloudNative2024</code> (Grupo: <code>solicitantes</code> &rarr; Scopes: <code>solicitudes/read</code>, <code>solicitudes/write</code>)
+                <strong>Lector / Cliente:</strong> <code>lector@pedidos360.com</code> / <code>Pedidos360!</code> (Grupo: <code>lectores</code> &rarr; Scopes inyectados: <code>pedidos/read</code>).
               </li>
               <li>
-                <strong>Aprobador:</strong> <code>aprobador@duocuc.cl</code> / <code>CloudNative2024</code> (Grupo: <code>aprobadores</code> &rarr; Scopes: <code>solicitudes/read</code>, <code>solicitudes/approve</code>)
+                <strong>Editor / Administrador:</strong> <code>admin@pedidos360.com</code> / <code>Pedidos360!</code> (Grupo: <code>administradores</code> &rarr; Scopes inyectados: <code>pedidos/read</code>, <code>pedidos/write</code>).
               </li>
             </ul>
           </div>
@@ -209,8 +201,8 @@ export default function App() {
             <button className="primario" onClick={() => login().catch((e) => setError(e.message))}>
               Iniciar sesión con Hosted UI
             </button>
-            <button onClick={() => ejecutarAccion('Consulta Pública Sin Autenticación', () => obtenerInfoPublica())}>
-              Probar Endpoint Público (/publico/info)
+            <button onClick={() => ejecutarAccion('Consulta Pública Sin Autenticación (/publico/datos)', () => obtenerDatosPublicos())}>
+              Probar Endpoint Público (/publico/datos)
             </button>
           </div>
         </section>
@@ -230,7 +222,7 @@ export default function App() {
                     <span key={g} className="badge badge-scope destacado">{g}</span>
                   ))
                 ) : (
-                  '(sin grupo)'
+                  '(sin grupo asignado)'
                 )}
               </dd>
 
@@ -239,7 +231,7 @@ export default function App() {
                 {scopesTokens.map((s) => (
                   <span
                     key={s}
-                    className={`badge badge-scope ${s.startsWith('solicitudes') ? 'destacado' : ''}`}
+                    className={`badge badge-scope ${s.startsWith('pedidos') ? 'destacado' : ''}`}
                   >
                     {s}
                   </span>
@@ -262,253 +254,141 @@ export default function App() {
               {tokens.refresh_token && (
                 <button onClick={renovarSesion}>Refrescar Token</button>
               )}
-              <button className="peligro" onClick={logout}>Cerrar Sesión (SSO)</button>
+              <button className="peligro" onClick={logout}>Cerrar Sesión SSO</button>
             </div>
           </section>
 
           {/* Navegación por Pestañas */}
           <div className="tabs">
             <button
-              className={`tab-boton ${pestanaActiva === 'solicitante' ? 'activo' : ''}`}
-              onClick={() => setPestanaActiva('solicitante')}
+              className={`tab-boton ${pestanaActiva === 'pedidos' ? 'activo' : ''}`}
+              onClick={() => setPestanaActiva('pedidos')}
             >
-              Vista Solicitante
-            </button>
-            <button
-              className={`tab-boton ${pestanaActiva === 'aprobador' ? 'activo' : ''}`}
-              onClick={() => setPestanaActiva('aprobador')}
-            >
-              Vista Aprobador
+              Gestión de Pedidos (CRUD)
             </button>
             <button
               className={`tab-boton ${pestanaActiva === 'seguridad' ? 'activo' : ''}`}
               onClick={() => setPestanaActiva('seguridad')}
             >
-              Matriz Scope Guard (RA1)
+              Consola Scope Guard (RA1)
+            </button>
+            <button
+              className={`tab-boton ${pestanaActiva === 'tokens' ? 'activo' : ''}`}
+              onClick={() => setPestanaActiva('tokens')}
+            >
+              Inspector JWT
             </button>
           </div>
 
-          {/* PESTAÑA 1: VISTA SOLICITANTE */}
-          {pestanaActiva === 'solicitante' && (
+          {/* PESTAÑA 1: CRUD PEDIDOS */}
+          {pestanaActiva === 'pedidos' && (
             <section>
-              <h2>Mis Solicitudes de Vacaciones</h2>
+              <h2>Listado de Pedidos</h2>
               <p className="sub">
-                Crear y consultar solicitudes. Requiere scopes <code>solicitudes/read</code> y <code>solicitudes/write</code>.
+                Visualización y creación de pedidos en Spring Boot Fargate vía API Gateway. Requiere scopes <code>pedidos/read</code> para lectura y <code>pedidos/write</code> para creación/modificación.
               </p>
 
-              {/* Formulario de Radicación */}
-              <form onSubmit={handleCrearSolicitud} style={{ marginBottom: '1.5rem' }}>
-                <h3>Nueva Solicitud de Vacaciones</h3>
+              {/* Formulario de Nuevo Pedido */}
+              <form onSubmit={handleCrearPedido} style={{ marginBottom: '1.5rem' }}>
+                <h3>Registrar Nuevo Pedido</h3>
                 <div className="form-grid">
-                  <div className="form-campo">
-                    <label>Fecha Inicio</label>
+                  <div className="form-campo" style={{ gridColumn: '1 / -1' }}>
+                    <label>Descripción del Pedido</label>
                     <input
-                      type="date"
-                      value={formNueva.fechaInicio}
-                      onChange={(e) => setFormNueva({ ...formNueva, fechaInicio: e.target.value })}
+                      type="text"
+                      placeholder="Ej: Servidor Dell PowerEdge R750"
+                      value={formNuevo.descripcion}
+                      onChange={(e) => setFormNuevo({ ...formNuevo, descripcion: e.target.value })}
                       required
                     />
                   </div>
                   <div className="form-campo">
-                    <label>Fecha Fin</label>
-                    <input
-                      type="date"
-                      value={formNueva.fechaFin}
-                      onChange={(e) => setFormNueva({ ...formNueva, fechaFin: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-campo">
-                    <label>Días Hábiles</label>
+                    <label>Monto (CLP)</label>
                     <input
                       type="number"
                       min="1"
-                      value={formNueva.dias}
-                      onChange={(e) => setFormNueva({ ...formNueva, dias: e.target.value })}
+                      value={formNuevo.monto}
+                      onChange={(e) => setFormNuevo({ ...formNuevo, monto: e.target.value })}
                       required
                     />
                   </div>
-                  <div className="form-campo" style={{ gridColumn: '1 / -1' }}>
-                    <label>Motivo / Justificación</label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Vacaciones legales de descanso anual"
-                      value={formNueva.motivo}
-                      onChange={(e) => setFormNueva({ ...formNueva, motivo: e.target.value })}
-                      required
-                    />
+                  <div className="form-campo">
+                    <label>Estado Inicial</label>
+                    <select
+                      value={formNuevo.estado}
+                      onChange={(e) => setFormNuevo({ ...formNuevo, estado: e.target.value })}
+                    >
+                      <option value="PENDIENTE">PENDIENTE</option>
+                      <option value="EN_PROCESO">EN_PROCESO</option>
+                      <option value="COMPLETADO">COMPLETADO</option>
+                      <option value="CANCELADO">CANCELADO</option>
+                    </select>
                   </div>
                 </div>
                 <button type="submit" className="primario" disabled={cargando}>
-                  Radicar Solicitud (Requiere solicitudes/write)
+                  Crear Pedido (Requiere pedidos/write)
                 </button>
               </form>
 
-              {/* Listado de Solicitudes */}
+              {/* Tabla de Pedidos */}
               <div className="tabla-contenedor">
                 <table>
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Solicitante</th>
-                      <th>Periodo</th>
-                      <th>Días</th>
-                      <th>Motivo</th>
+                      <th>Cliente</th>
+                      <th>Descripción</th>
+                      <th>Monto</th>
                       <th>Estado</th>
-                      <th>Comentario Revisión</th>
+                      <th>Fecha Creación</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {solicitudes.length === 0 ? (
+                    {pedidos.length === 0 ? (
                       <tr>
-                        <td colSpan="8" style={{ textAlign: 'center', color: 'var(--tenue)' }}>
-                          No hay solicitudes registradas o pulsa 'Actualizar' para recargar.
+                        <td colSpan="7" style={{ textAlign: 'center', color: 'var(--tenue)' }}>
+                          No hay pedidos registrados o pulsa 'Actualizar' para recargar.
                         </td>
                       </tr>
                     ) : (
-                      solicitudes.map((s) => (
-                        <tr key={s.id}>
-                          <td><strong>#{s.id}</strong></td>
-                          <td>{s.solicitanteEmail}</td>
-                          <td>{s.fechaInicio} &rarr; {s.fechaFin}</td>
-                          <td>{s.dias}</td>
-                          <td>{s.motivo}</td>
+                      pedidos.map((p) => (
+                        <tr key={p.id}>
+                          <td><strong>#{p.id}</strong></td>
+                          <td>{p.clienteEmail}</td>
+                          <td>{p.descripcion}</td>
+                          <td>${Number(p.monto).toLocaleString('es-CL')}</td>
                           <td>
                             <span
                               className={`badge ${
-                                s.estado === 'APROBADA'
+                                p.estado === 'COMPLETADO'
                                   ? 'badge-aprobada'
-                                  : s.estado === 'RECHAZADA'
+                                  : p.estado === 'CANCELADO'
                                   ? 'badge-rechazada'
                                   : 'badge-pendiente'
                               }`}
                             >
-                              {s.estado}
+                              {p.estado}
                             </span>
                           </td>
+                          <td>{p.fechaCreacion ? p.fechaCreacion.substring(0, 19).replace('T', ' ') : '—'}</td>
                           <td>
-                            {s.comentarioRevision ? (
-                              <div className="comentario-caja">
-                                <div>"{s.comentarioRevision}"</div>
-                                <small style={{ opacity: 0.7 }}>Por: {s.aprobadorEmail || 'Revisor'}</small>
-                              </div>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                          <td>
-                            <button
-                              disabled={cargando}
-                              onClick={() => handleEliminar(s.id)}
-                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.78rem', color: 'var(--mal)' }}
-                            >
-                              Eliminar
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ marginTop: '1rem' }}>
-                <button disabled={cargando} onClick={() => ejecutarAccion('Listar Solicitudes (GET)', () => obtenerSolicitudes(tokens.access_token), true)}>
-                  Actualizar Lista (GET /solicitudes)
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* PESTAÑA 2: VISTA APROBADOR */}
-          {pestanaActiva === 'aprobador' && (
-            <section>
-              <h2>Bandeja de Aprobación (Jefatura / RRHH)</h2>
-              <p className="sub">
-                Revisar solicitudes y ejecutar acción de Aprobar o Rechazar con comentario. Requiere scope <code>solicitudes/approve</code>.
-              </p>
-
-              <div className="tabla-contenedor">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Solicitante</th>
-                      <th>Fechas</th>
-                      <th>Días</th>
-                      <th>Motivo</th>
-                      <th>Estado Actual</th>
-                      <th>Comentario de Revisión</th>
-                      <th>Decisión</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {solicitudes.length === 0 ? (
-                      <tr>
-                        <td colSpan="8" style={{ textAlign: 'center', color: 'var(--tenue)' }}>
-                          No hay solicitudes para revisar.
-                        </td>
-                      </tr>
-                    ) : (
-                      solicitudes.map((s) => (
-                        <tr key={s.id}>
-                          <td><strong>#{s.id}</strong></td>
-                          <td>{s.solicitanteEmail}</td>
-                          <td>{s.fechaInicio} &rarr; {s.fechaFin}</td>
-                          <td>{s.dias}</td>
-                          <td>{s.motivo}</td>
-                          <td>
-                            <span
-                              className={`badge ${
-                                s.estado === 'APROBADA'
-                                  ? 'badge-aprobada'
-                                  : s.estado === 'RECHAZADA'
-                                  ? 'badge-rechazada'
-                                  : 'badge-pendiente'
-                              }`}
-                            >
-                              {s.estado}
-                            </span>
-                          </td>
-                          <td style={{ minWidth: '220px' }}>
-                            <input
-                              type="text"
-                              placeholder="Observación de la jefatura..."
-                              value={comentariosRevision[s.id] || ''}
-                              onChange={(e) =>
-                                setComentariosRevision({
-                                  ...comentariosRevision,
-                                  [s.id]: e.target.value,
-                                })
-                              }
-                              style={{ width: '100%', padding: '0.4rem', fontSize: '0.82rem' }}
-                            />
-                          </td>
-                          <td style={{ minWidth: '170px' }}>
-                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <div style={{ display: 'flex', gap: '0.3rem' }}>
+                              {p.estado !== 'COMPLETADO' && (
+                                <button
+                                  disabled={cargando}
+                                  onClick={() => handleCambiarEstado(p.id, 'COMPLETADO')}
+                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--ok)' }}
+                                >
+                                  Completar
+                                </button>
+                              )}
                               <button
                                 disabled={cargando}
-                                onClick={() => handleAprobar(s.id)}
-                                style={{
-                                  padding: '0.4rem 0.7rem',
-                                  fontSize: '0.8rem',
-                                  borderColor: 'var(--ok)',
-                                  color: 'var(--ok)',
-                                }}
+                                onClick={() => handleEliminar(p.id)}
+                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--mal)' }}
                               >
-                                Aprobar
-                              </button>
-                              <button
-                                disabled={cargando}
-                                onClick={() => handleRechazar(s.id)}
-                                style={{
-                                  padding: '0.4rem 0.7rem',
-                                  fontSize: '0.8rem',
-                                  borderColor: 'var(--mal)',
-                                  color: 'var(--mal)',
-                                }}
-                              >
-                                Rechazar
+                                Eliminar
                               </button>
                             </div>
                           </td>
@@ -518,10 +398,15 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+              <div style={{ marginTop: '1rem' }}>
+                <button disabled={cargando} onClick={() => ejecutarAccion('Listar Pedidos (GET /pedidos)', () => obtenerPedidos(tokens.access_token), true)}>
+                  Actualizar Lista (GET /pedidos)
+                </button>
+              </div>
             </section>
           )}
 
-          {/* PESTAÑA 3: MATRIZ DE VERIFICACIÓN Y SCOPE GUARD */}
+          {/* PESTAÑA 2: CONSOLA SCOPE GUARD (RA1) */}
           {pestanaActiva === 'seguridad' && (
             <section>
               <h2>Matriz de Verificación y Scope Guard (RA1)</h2>
@@ -530,122 +415,136 @@ export default function App() {
               </p>
 
               <div className="grid-pruebas">
-                {/* Caso 1: Petición sin token */}
+                {/* 1. Ruta Pública */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <h4>1. Petición Sin Token</h4>
-                    <p><code>GET /solicitudes</code> sin cabecera Authorization.</p>
+                    <h4>1. Ruta Pública (/publico/datos)</h4>
+                    <p><code>GET /publico/datos</code> sin autorizador en API Gateway.</p>
                   </div>
                   <button
                     disabled={cargando}
-                    onClick={() => ejecutarAccion('1. Sin Token (GET /solicitudes)', () => probarSinToken('/solicitudes'))}
+                    onClick={() => ejecutarAccion('1. Ruta Pública (GET /publico/datos)', () => obtenerDatosPublicos())}
+                  >
+                    Probar (Esperado 200 OK)
+                  </button>
+                </div>
+
+                {/* 2. Consulta de Pedidos */}
+                <div className="tarjeta-prueba">
+                  <div>
+                    <h4>2. Lectura de Pedidos (GET /pedidos)</h4>
+                    <p>Requiere scope <code>pedidos/read</code> concedido a lectores y administradores.</p>
+                  </div>
+                  <button
+                    className="primario"
+                    disabled={cargando}
+                    onClick={() => ejecutarAccion('2. Lectura Pedidos (GET /pedidos)', () => obtenerPedidos(tokens.access_token))}
+                  >
+                    Consultar (Esperado 200 OK)
+                  </button>
+                </div>
+
+                {/* 3. Creación de Pedido */}
+                <div className="tarjeta-prueba">
+                  <div>
+                    <h4>3. Creación de Pedido (POST /pedidos)</h4>
+                    <p>Requiere scope <code>pedidos/write</code>. Solo administradores/editores.</p>
+                  </div>
+                  <button
+                    disabled={cargando}
+                    onClick={() =>
+                      ejecutarAccion('3. Creación Pedido (POST /pedidos)', () =>
+                        crearPedido(tokens.access_token, {
+                          clienteEmail: emailUsuario,
+                          descripcion: 'Dispositivo IoT Sensor de Temperatura Industrial',
+                          monto: 145000,
+                          estado: 'PENDIENTE',
+                        }), true
+                      )
+                    }
+                  >
+                    Crear (201 Admin / 403 Lector)
+                  </button>
+                </div>
+
+                {/* 4. Petición Sin Token */}
+                <div className="tarjeta-prueba">
+                  <div>
+                    <h4>4. Petición Sin Token (GET /pedidos)</h4>
+                    <p>Petición anónima a ruta protegida. Rechazada en el borde.</p>
+                  </div>
+                  <button
+                    disabled={cargando}
+                    onClick={() => ejecutarAccion('4. Sin Token (GET /pedidos)', () => probarSinToken('/pedidos', 'GET'))}
                   >
                     Probar (Esperado 401)
                   </button>
                 </div>
 
-                {/* Caso 2: Ruta Pública */}
+                {/* 5. Intento POST Sin Token */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <h4>2. Ruta Pública (/publico/info)</h4>
-                    <p><code>GET /publico/info</code> sin autorizador en Gateway.</p>
+                    <h4>5. Escritura Sin Token (POST /pedidos)</h4>
+                    <p>Petición POST anónima rechazada por API Gateway JWT Authorizer.</p>
                   </div>
                   <button
                     disabled={cargando}
-                    onClick={() => ejecutarAccion('2. Ruta Pública (/publico/info)', () => obtenerInfoPublica())}
+                    onClick={() => ejecutarAccion('5. POST Sin Token (POST /pedidos)', () => probarSinToken('/pedidos', 'POST'))}
                   >
-                    Probar (Esperado 200)
+                    Probar (Esperado 401)
                   </button>
                 </div>
 
-                {/* Caso 3: Consulta Solicitudes */}
+                {/* 6. Ruta Protegida con scope openid */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <h4>3. Consulta Solicitudes</h4>
-                    <p><code>GET /solicitudes</code> requiere scope <code>solicitudes/read</code>.</p>
-                  </div>
-                  <button
-                    className="primario"
-                    disabled={cargando}
-                    onClick={() => ejecutarAccion('3. Consulta Solicitudes (GET)', () => obtenerSolicitudes(tokens.access_token))}
-                  >
-                    Consultar (Esperado 200)
-                  </button>
-                </div>
-
-                {/* Caso 4: Crear Solicitud */}
-                <div className="tarjeta-prueba">
-                  <div>
-                    <h4>4. Crear Solicitud (POST)</h4>
-                    <p><code>POST /solicitudes</code> requiere scope <code>solicitudes/write</code>.</p>
+                    <h4>6. Datos del Sistema (GET /datos)</h4>
+                    <p>Requiere autenticación con scope estándar <code>openid</code>.</p>
                   </div>
                   <button
                     disabled={cargando}
-                    onClick={() =>
-                      ejecutarAccion('4. Crear Solicitud (POST)', () =>
-                        crearSolicitud(tokens.access_token, {
-                          solicitanteEmail: emailUsuario,
-                          fechaInicio: '2026-09-01',
-                          fechaFin: '2026-09-15',
-                          dias: 14,
-                          motivo: 'Vacaciones de primavera',
-                        }), true
-                      )
-                    }
+                    onClick={() => ejecutarAccion('6. Datos Protegidos (GET /datos)', () => obtenerDatosProtegidos(tokens.access_token))}
                   >
-                    Crear (201 Solicitante / 403 Aprobador)
-                  </button>
-                </div>
-
-                {/* Caso 5: Acción Aprobar */}
-                <div className="tarjeta-prueba">
-                  <div>
-                    <h4>5. Acción Aprobar (POST)</h4>
-                    <p><code>POST /solicitudes/1/aprobar</code> requiere scope <code>solicitudes/approve</code>.</p>
-                  </div>
-                  <button
-                    disabled={cargando}
-                    onClick={() =>
-                      ejecutarAccion('5. Aprobar Solicitud #1', () =>
-                        aprobarSolicitud(tokens.access_token, 1, {
-                          comentario: 'Aprobación verificada desde consola de auditoría.',
-                          aprobadorEmail: emailUsuario,
-                        }), true
-                      )
-                    }
-                  >
-                    Aprobar (200 Aprobador / 403 Solicitante)
-                  </button>
-                </div>
-
-                {/* Caso 6: Acción Rechazar */}
-                <div className="tarjeta-prueba">
-                  <div>
-                    <h4>6. Acción Rechazar (POST)</h4>
-                    <p><code>POST /solicitudes/1/rechazar</code> requiere scope <code>solicitudes/approve</code>.</p>
-                  </div>
-                  <button
-                    disabled={cargando}
-                    onClick={() =>
-                      ejecutarAccion('6. Rechazar Solicitud #1', () =>
-                        rechazarSolicitud(tokens.access_token, 1, {
-                          comentario: 'Rechazo verificado desde consola de auditoría.',
-                          aprobadorEmail: emailUsuario,
-                        }), true
-                      )
-                    }
-                  >
-                    Rechazar (200 Aprobador / 403 Solicitante)
+                    Consultar (Esperado 200 OK)
                   </button>
                 </div>
               </div>
             </section>
           )}
 
+          {/* PESTAÑA 3: INSPECTOR JWT */}
+          {pestanaActiva === 'tokens' && (
+            <section>
+              <h2>Inspector Visual de Tokens JWT (OIDC & OAuth 2.0)</h2>
+              <p className="sub">
+                Diferenciación arquitectónica entre <strong>ID Token</strong> (identidad del usuario autenticado) y <strong>Access Token</strong> (autorización y scopes de negocio inyectados por Lambda Pre-Token Generation V2).
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.2rem', marginTop: '1rem' }}>
+                <div style={{ background: 'var(--tarjeta)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--borde)' }}>
+                  <h3 style={{ color: 'var(--primario)', marginTop: 0 }}>ID Token (Identidad / Claims)</h3>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--tenue)' }}>Contiene datos del perfil de usuario (email, sub, grupos):</p>
+                  <pre style={{ maxHeight: '350px', overflowY: 'auto' }}>{JSON.stringify(idClaims, null, 2)}</pre>
+                </div>
+
+                <div style={{ background: 'var(--tarjeta)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--borde)' }}>
+                  <h3 style={{ color: 'var(--ok)', marginTop: 0 }}>Access Token (Autorización / Scopes)</h3>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--tenue)' }}>Contiene el claim <code>scope</code> evaluado por API Gateway Scope Guard:</p>
+                  <pre style={{ maxHeight: '350px', overflowY: 'auto' }}>{JSON.stringify(accessClaims, null, 2)}</pre>
+                </div>
+              </div>
+
+              <details style={{ marginTop: '1.5rem' }}>
+                <summary>Ver Tokens Crudos (SessionStorage)</summary>
+                <pre>{JSON.stringify(tokens, null, 2)}</pre>
+              </details>
+            </section>
+          )}
+
           {/* Resultado de la Última Petición */}
           {resultadoApi && (
             <section>
-              <h2>Resultado: {resultadoApi.prueba}</h2>
+              <h2>Resultado de la Comprobación: {resultadoApi.prueba}</h2>
               <div style={{ margin: '0.5rem 0 1rem' }}>
                 <span
                   className={`badge ${
@@ -655,29 +554,16 @@ export default function App() {
                       ? 'badge-aviso'
                       : 'badge-mal'
                   }`}
-                  style={{ fontSize: '0.9rem', padding: '0.3rem 0.7rem' }}
+                  style={{ fontSize: '0.95rem', padding: '0.35rem 0.8rem' }}
                 >
                   HTTP {resultadoApi.status} {resultadoApi.statusText}
                 </span>
-                <p style={{ marginTop: '0.5rem' }}>{resultadoApi.diagnostico}</p>
+                <p style={{ marginTop: '0.6rem', fontWeight: 500 }}>{resultadoApi.diagnostico}</p>
               </div>
 
               <pre>{JSON.stringify(resultadoApi.data, null, 2)}</pre>
             </section>
           )}
-
-          {/* Inspección Detallada de Tokens */}
-          <details>
-            <summary>Inspeccionar Claims Decodificados (ID Token vs Access Token)</summary>
-            <h3>ID Token (Identidad del Usuario)</h3>
-            <pre>{JSON.stringify(idClaims, null, 2)}</pre>
-
-            <h3>Access Token (Autorización y Scopes Inyectados por Lambda Pre-Token V2)</h3>
-            <pre>{JSON.stringify(accessClaims, null, 2)}</pre>
-
-            <h3>Tokens Crudos en LocalStorage</h3>
-            <pre>{JSON.stringify(tokens, null, 2)}</pre>
-          </details>
         </>
       )}
     </main>

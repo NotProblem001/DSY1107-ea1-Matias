@@ -2,14 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handler } from '../index.mjs';
 
-test('Usuario del grupo solicitantes recibe solicitudes/read y solicitudes/write', async () => {
+test('Usuario del grupo lectores recibe pedidos/read', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
-    userName: 'solicitante-test',
+    userName: 'lector-test',
     request: {
-      userAttributes: { email: 'solicitante@duoc.cl' },
-      groupConfiguration: { groupsToOverride: ['solicitantes'] }
+      userAttributes: { email: 'lector@pedidos360.com' },
+      groupConfiguration: { groupsToOverride: ['lectores'] }
     },
     response: {}
   };
@@ -17,17 +17,17 @@ test('Usuario del grupo solicitantes recibe solicitudes/read y solicitudes/write
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['solicitudes/read', 'solicitudes/write']);
+  assert.deepEqual(scopes, ['pedidos/read']);
 });
 
-test('Usuario del grupo aprobadores recibe solicitudes/read y solicitudes/approve', async () => {
+test('Usuario del grupo clientes recibe pedidos/read', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
-    userName: 'aprobador-test',
+    userName: 'cliente-test',
     request: {
-      userAttributes: { email: 'aprobador@duoc.cl' },
-      groupConfiguration: { groupsToOverride: ['aprobadores'] }
+      userAttributes: { email: 'cliente@pedidos360.com' },
+      groupConfiguration: { groupsToOverride: ['clientes'] }
     },
     response: {}
   };
@@ -35,17 +35,17 @@ test('Usuario del grupo aprobadores recibe solicitudes/read y solicitudes/approv
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['solicitudes/read', 'solicitudes/approve']);
+  assert.deepEqual(scopes, ['pedidos/read']);
 });
 
-test('Usuario en ambos grupos recibe solicitudes/read, solicitudes/write y solicitudes/approve sin duplicados', async () => {
+test('Usuario del grupo editores recibe pedidos/read y pedidos/write', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
-    userName: 'super-test',
+    userName: 'editor-test',
     request: {
-      userAttributes: { email: 'admin@duoc.cl' },
-      groupConfiguration: { groupsToOverride: ['solicitantes', 'aprobadores'] }
+      userAttributes: { email: 'editor@pedidos360.com' },
+      groupConfiguration: { groupsToOverride: ['editores'] }
     },
     response: {}
   };
@@ -53,7 +53,43 @@ test('Usuario en ambos grupos recibe solicitudes/read, solicitudes/write y solic
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['solicitudes/read', 'solicitudes/write', 'solicitudes/approve']);
+  assert.deepEqual(scopes, ['pedidos/read', 'pedidos/write']);
+});
+
+test('Usuario del grupo administradores recibe pedidos/read y pedidos/write', async () => {
+  const event = {
+    version: '2',
+    triggerSource: 'TokenGeneration_HostedAuth',
+    userName: 'admin-test',
+    request: {
+      userAttributes: { email: 'admin@pedidos360.com' },
+      groupConfiguration: { groupsToOverride: ['administradores'] }
+    },
+    response: {}
+  };
+
+  const res = await handler(event);
+  const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
+
+  assert.deepEqual(scopes, ['pedidos/read', 'pedidos/write']);
+});
+
+test('Usuario en lectores y administradores recibe pedidos/read y pedidos/write sin duplicados', async () => {
+  const event = {
+    version: '2',
+    triggerSource: 'TokenGeneration_HostedAuth',
+    userName: 'multi-test',
+    request: {
+      userAttributes: { email: 'multi@pedidos360.com' },
+      groupConfiguration: { groupsToOverride: ['lectores', 'administradores'] }
+    },
+    response: {}
+  };
+
+  const res = await handler(event);
+  const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
+
+  assert.deepEqual(scopes, ['pedidos/read', 'pedidos/write']);
 });
 
 test('Usuario sin grupo no recibe scopes de negocio', async () => {
@@ -62,7 +98,7 @@ test('Usuario sin grupo no recibe scopes de negocio', async () => {
     triggerSource: 'TokenGeneration_HostedAuth',
     userName: 'sin-grupo',
     request: {
-      userAttributes: { email: 'externo@duoc.cl' },
+      userAttributes: { email: 'anon@pedidos360.com' },
       groupConfiguration: { groupsToOverride: [] }
     },
     response: {}
@@ -73,3 +109,4 @@ test('Usuario sin grupo no recibe scopes de negocio', async () => {
 
   assert.deepEqual(scopes, []);
 });
+

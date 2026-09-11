@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -14,62 +15,103 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class CloudnativeApplicationTests {
 
-	@Autowired
-	private MockMvc mockMvc;
+    @Autowired
+    private MockMvc mockMvc;
 
-	@Test
-	void contextLoads() {
-	}
+    @Test
+    void contextLoads() {
+    }
 
-	@Test
-	void testPublicoInfo() throws Exception {
-		mockMvc.perform(get("/publico/info"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.sistema").value("Gestion de Solicitudes de Vacaciones"))
-				.andExpect(jsonPath("$.estado").value("OPERATIVO"));
-	}
+    @Test
+    void testActuatorHealth() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
 
-	@Test
-	void testListarSolicitudes() throws Exception {
-		mockMvc.perform(get("/solicitudes"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$").isArray());
-	}
+    @Test
+    void testPublicoDatos() throws Exception {
+        mockMvc.perform(get("/publico/datos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sistema").value("Pedidos360"))
+                .andExpect(jsonPath("$.autorizado").value(false));
+    }
 
-	@Test
-	void testCrearYAprobarSolicitud() throws Exception {
-		String nuevaJson = """
-				{
-					"solicitanteEmail": "test.empleado@duocuc.cl",
-					"fechaInicio": "2026-03-01",
-					"fechaFin": "2026-03-10",
-					"dias": 10,
-					"motivo": "Descanso programado"
-				}
-				""";
+    @Test
+    void testRutaProtegidaSinAutenticacionRetorna401() throws Exception {
+        mockMvc.perform(get("/pedidos"))
+                .andExpect(status().isUnauthorized());
+    }
 
-		mockMvc.perform(post("/solicitudes")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(nuevaJson))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.id").exists())
-				.andExpect(jsonPath("$.estado").value("PENDIENTE"))
-				.andExpect(jsonPath("$.solicitanteEmail").value("test.empleado@duocuc.cl"));
+    @Test
+    @WithMockUser(username = "cliente@pedidos360.com", roles = {"USER"})
+    void testListarPedidosConAutenticacion() throws Exception {
+        mockMvc.perform(get("/pedidos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
 
-		// Probar aprobacion
-		String revisionJson = """
-				{
-					"comentario": "Aprobado por el jefe directo",
-					"aprobadorEmail": "aprobador@duocuc.cl"
-				}
-				""";
+    @Test
+    @WithMockUser(username = "admin@pedidos360.com", roles = {"ADMIN"})
+    void testCrudCompletoPedidos() throws Exception {
+        // 1. Crear pedido (POST /pedidos) -> 201 Created
+        String nuevoPedidoJson = """
+                {
+                    "clienteEmail": "empresa@pedidos360.com",
+                    "descripcion": "Cluster Kubernetes 3 Nodos",
+                    "monto": 2500000.0,
+                    "estado": "PENDIENTE"
+                }
+                """;
 
-		mockMvc.perform(post("/solicitudes/1/aprobar")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(revisionJson))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.id").value(1))
-				.andExpect(jsonPath("$.estado").value("APROBADA"))
-				.andExpect(jsonPath("$.comentarioRevision").value("Aprobado por el jefe directo"));
-	}
+        String respuestaPost = mockMvc.perform(post("/pedidos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(nuevoPedidoJson))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.clienteEmail").value("empresa@pedidos360.com"))
+                .andExpect(jsonPath("$.monto").value(2500000.0))
+                .andExpect(jsonPath("$.estado").value("PENDIENTE"))
+                .andReturn().getResponse().getContentAsString();
+
+        // Extraer id creado (primer digito de id o consultar por ID)
+        mockMvc.perform(get("/pedidos/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        // 2. Actualizar pedido (PUT /pedidos/1) -> 200 OK
+        String actualizacionJson = """
+                {
+                    "clienteEmail": "empresa@pedidos360.com",
+                    "descripcion": "Cluster Kubernetes 3 Nodos - Aprobado",
+                    "monto": 2600000.0,
+                    "estado": "EN_PROCESO"
+                }
+                """;
+
+        mockMvc.perform(put("/pedidos/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(actualizacionJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.descripcion").value("Cluster Kubernetes 3 Nodos - Aprobado"))
+                .andExpect(jsonPath("$.estado").value("EN_PROCESO"));
+
+        // 3. Eliminar pedido (DELETE /pedidos/1) -> 204 No Content
+        mockMvc.perform(delete("/pedidos/1"))
+                .andExpect(status().isNoContent());
+
+        // 4. Verificar eliminación -> 404 Not Found
+        mockMvc.perform(get("/pedidos/1"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @WithMockUser(username = "auditor@pedidos360.com", roles = {"USER"})
+    void testDatosProtegidosConAutenticacion() throws Exception {
+        mockMvc.perform(get("/datos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sistema").value("Pedidos360"))
+                .andExpect(jsonPath("$.autorizado").value(true))
+                .andExpect(jsonPath("$.indicadores.uf").exists());
+    }
 }

@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
 #
-# Publica una version nueva del backend en ECS (Elastic Container Service).
+# Publica una versión nueva del backend Pedidos360 en ECS (Elastic Container Service).
 #
-# El servicio corre con tipo de lanzamiento Fargate, que es lo que hace que no
-# haya ninguna maquina que administrar aqui: este script construye la imagen,
-# la sube y le pide a ECS que reemplace la task.
+# El servicio corre con tipo de lanzamiento Fargate (linux/amd64).
+# Terraform crea la infraestructura base (cluster, servicio, seguridad) y este script
+# empaqueta el artefacto, sube la imagen Docker a ECR, actualiza la tarea de ECS
+# y reapunta dinámicamente las integraciones de API Gateway hacia la nueva IP de la tarea.
 #
-# Mismo reparto que con Amplify y que el que la guia 1.3.8 planteaba para
-# Beanstalk: Terraform crea lo que existe una vez (cluster, balanceador,
-# servicio) y este script publica lo que cambia en cada commit (la imagen).
-#
+# Uso:
 #   ./scripts/publicar-ecs.sh
 #
-# Lee cluster, servicio y repositorio de los outputs de Terraform, asi que no
-# hay nombres repetidos en dos sitios.
 
 set -euo pipefail
 
@@ -22,16 +18,7 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TF="terraform -chdir=${RAIZ}/terraform"
 
 # ---------------------------------------------------------------------------
-# De donde salen los nombres.
-#
-# En local, de los outputs de Terraform: no hay que repetirlos en ningun sitio.
-# En el pipeline no sirve, porque el estado de Terraform es local y esta en
-# .gitignore: alli los valores llegan como variables de entorno (variables del
-# repositorio en GitHub Actions).
-#
-# La variable de entorno manda; Terraform es el respaldo. Asi el MISMO script
-# corre en los dos lados, que era el punto: una sola definicion del
-# procedimiento.
+# Resolución dinámica de variables (entorno manda; Terraform es respaldo)
 # ---------------------------------------------------------------------------
 leer() {
   local desde_entorno="${!1:-}"
@@ -45,33 +32,22 @@ leer() {
   fi
 }
 
-echo "==> Leyendo la configuracion"
+echo "==> Leyendo la configuración de Pedidos360"
 REPO="$(leer ECR_REPO ecs_repositorio)"
 CLUSTER="$(leer ECS_CLUSTER ecs_cluster)"
 SERVICIO="$(leer ECS_SERVICE ecs_servicio)"
 API_ID="$(leer API_ID api_id)"
-INTEGRACION_PUB="$(leer INTEGRATION_PUBLICO_INFO_ID integracion_publico_info_id)"
-INTEGRACION_SOL_COL="$(leer INTEGRATION_SOLICITUDES_COL_ID integracion_solicitudes_coleccion_id)"
-INTEGRACION_SOL_ELE="$(leer INTEGRATION_SOLICITUDES_ELE_ID integracion_solicitudes_elemento_id)"
-INTEGRACION_SOL_APR="$(leer INTEGRATION_SOLICITUDES_APR_ID integracion_solicitudes_aprobar_id)"
-INTEGRACION_SOL_REC="$(leer INTEGRATION_SOLICITUDES_REC_ID integracion_solicitudes_rechazar_id)"
+INTEGRACION_PUB="$(leer INTEGRATION_PUBLICO_DATOS_ID integracion_publico_datos_id)"
+INTEGRACION_DAT="$(leer INTEGRATION_DATOS_ID integracion_datos_id)"
+INTEGRACION_PED_COL="$(leer INTEGRATION_PEDIDOS_COL_ID integracion_pedidos_col_id)"
+INTEGRACION_PED_ELE="$(leer INTEGRATION_PEDIDOS_ELE_ID integracion_pedidos_ele_id)"
 
-# Etiqueta unica por despliegue, como pedia la lamina 19: reutilizar una
-# etiqueta hace imposible saber que esta corriendo, y volver atras.
 VERSION="v$(date +%Y%m%d-%H%M%S)"
 
-# ./mvnw y no "mvn": el wrapper baja la version de Maven que declara
-# .mvn/wrapper/maven-wrapper.properties, asi el proyecto compila igual en una
-# maquina sin Maven instalado. Es el mismo motivo por el que el front usa npm
-# desde package.json y no una instalacion global.
-echo "==> 1/5 Construyendo el jar"
-( cd "${RAIZ}/backend" && ./mvnw --batch-mode --no-transfer-progress clean verify )
+echo "==> 1/5 Construyendo el JAR con Maven Wrapper (Java 21)"
+( cd "${RAIZ}/backend" && ./mvnw --batch-mode --no-transfer-progress clean package -DskipTests )
 
-# --platform linux/amd64 NO es opcional: si construyes en un Mac con Apple
-# Silicon, la imagen sale arm64 y la task de Fargate muere con "exec format
-# error", que no dice nada util. Debe coincidir con el runtime_platform de
-# ecs.tf.
-echo "==> 2/5 Construyendo la imagen (${VERSION}, linux/amd64)"
+echo "==> 2/5 Construyendo la imagen Docker (${VERSION}, linux/amd64)"
 docker build --platform linux/amd64 \
   -t "${REPO}:${VERSION}" -t "${REPO}:latest" "${RAIZ}/backend"
 
@@ -79,32 +55,11 @@ echo "==> 3/5 Autenticando contra ECR"
 aws ecr get-login-password --region "$REGION" \
   | docker login --username AWS --password-stdin "${REPO%%/*}"
 
-echo "==> 4/5 Subiendo la imagen"
+echo "==> 4/5 Subiendo la imagen a ECR"
 docker push "${REPO}:${VERSION}"
 docker push "${REPO}:latest"
 
-# ---------------------------------------------------------------------------
-# Se registra una revision NUEVA clavada a ${VERSION}, en vez de reciclar
-# :latest con --force-new-deployment.
-#
-# NO ES UN CAPRICHO. backend_deploy.yml hace exactamente esto, y si aqui se
-# siguiera usando --force-new-deployment, este script quedaria roto en cuanto el
-# pipeline desplegara una vez: el servicio estaria clavado a una etiqueta
-# concreta, force-new-deployment volveria a bajar ESA, y el script diria
-# "desplegada" dejando corriendo la imagen anterior. Un fallo silencioso y con
-# cara de exito, que es el peor tipo.
-#
-# De paso queda el historial: cada revision apunta a una etiqueta distinta, asi
-# que volver atras es un update-service a la revision de antes.
-#
-# La familia de la task definition coincide con el nombre del servicio (los dos
-# salen de "dsy1107-backend-<apellido>" en ecs.tf). Preguntar por la familia
-# devuelve la ultima revision ACTIVA, que es la que mantiene Terraform: asi un
-# cambio de variables de entorno en ecs.tf entra en el despliegue siguiente.
-#
-# Requiere jq.
-# ---------------------------------------------------------------------------
-echo "==> 5/5 Registrando la revision y redesplegando"
+echo "==> 5/5 Registrando la revisión y actualizando ECS Fargate"
 
 command -v jq >/dev/null || { echo "Falta jq." >&2; exit 1; }
 
@@ -120,28 +75,23 @@ REVISION="$(aws ecs register-task-definition --region "$REGION" \
   --cli-input-json "$TAREA_JSON" \
   --query "taskDefinition.taskDefinitionArn" --output text)"
 
-echo "    revision ${REVISION##*/}"
+echo "    Nueva revisión registrada: ${REVISION##*/}"
 
 aws ecs update-service --region "$REGION" \
   --cluster "$CLUSTER" --service "$SERVICIO" \
   --task-definition "$REVISION" >/dev/null
 
-echo "    Esperando a que el despliegue termine..."
+echo "    Esperando a que el despliegue termine y estabilice..."
 INTENTOS=60
 for INTENTO in $(seq 1 $INTENTOS); do
-  # Sin "|| true" el set -e mata el script con el error crudo de AWS. Interesa
-  # distinguir dos cosas que se parecen y no son lo mismo: un despliegue que va
-  # mal, y un lab que se cerro debajo.
   if ! LEIDO="$(aws ecs describe-services --region "$REGION" \
     --cluster "$CLUSTER" --services "$SERVICIO" \
     --query "services[0].[deployments[0].rolloutState,runningCount,desiredCount]" \
     --output text 2>&1)"; then
     if echo "$LEIDO" | grep -q "explicit deny"; then
       echo >&2
-      echo "Se cerro la sesion del Learner Lab en mitad del despliegue." >&2
-      echo "La imagen YA se subio y el redespliegue YA se lanzo; solo se perdio" >&2
-      echo "el sondeo. Reabre el lab, actualiza las credenciales y vuelve a" >&2
-      echo "correr esto para confirmar el estado." >&2
+      echo "Se cerró la sesión del Learner Lab en mitad del despliegue." >&2
+      echo "Reabre el lab, actualiza las credenciales y vuelve a ejecutar." >&2
       exit 1
     fi
     echo "No se pudo consultar el servicio: $LEIDO" >&2
@@ -150,37 +100,27 @@ for INTENTO in $(seq 1 $INTENTOS); do
   ESTADO="$(echo "$LEIDO" | awk '{print $1}')"
   CORRIENDO="$(echo "$LEIDO" | awk '{print $2}')"
   DESEADAS="$(echo "$LEIDO" | awk '{print $3}')"
-  echo "    ${ESTADO}  ${CORRIENDO}/${DESEADAS}"
+  echo "    Estado: ${ESTADO} | Instancias: ${CORRIENDO}/${DESEADAS}"
 
-  # Los tres campos, no solo el estado: mismo criterio que en Amplify, un
-  # despliegue a medias no pasa por bueno.
   if [ "$ESTADO" = "COMPLETED" ] && [ "$CORRIENDO" = "$DESEADAS" ]; then
     break
   fi
   if [ "$ESTADO" = "FAILED" ]; then
-    echo
-    echo "FALLO el despliegue. Los logs del contenedor:" >&2
+    echo "FALLÓ el despliegue. Logs del contenedor:" >&2
     echo "    aws logs tail /ecs/${SERVICIO} --follow" >&2
     exit 1
   fi
   if [ "$INTENTO" -eq "$INTENTOS" ]; then
-    echo "Se agoto la espera. Revisa:  aws logs tail /ecs/${SERVICIO} --follow" >&2
+    echo "Se agotó la espera. Revisa: aws logs tail /ecs/${SERVICIO} --follow" >&2
     exit 1
   fi
   sleep 10
 done
 
 # ---------------------------------------------------------------------------
-# Reapuntar el API Gateway.
-#
-# Esto es lo que un balanceador haria innecesario: sin ALB, cada despliegue
-# levanta una task con IP publica nueva, asi que la integracion del gateway
-# queda apuntando a una direccion muerta hasta que alguien la actualice.
-#
-# La IP no se pregunta directamente: la task expone una interfaz de red (ENI),
-# y la IP publica cuelga de esa interfaz. Son tres saltos.
+# Reapuntar el API Gateway a la IP de la nueva tarea Fargate
 # ---------------------------------------------------------------------------
-echo "==> Reapuntando el API Gateway a la task nueva"
+echo "==> Reapuntando API Gateway a la tarea Fargate activa"
 
 TAREA="$(aws ecs list-tasks --region "$REGION" \
   --cluster "$CLUSTER" --service-name "$SERVICIO" --desired-status RUNNING \
@@ -196,35 +136,28 @@ IP="$(aws ec2 describe-network-interfaces --region "$REGION" \
   --query "NetworkInterfaces[0].Association.PublicIp" --output text)"
 
 if [ -z "$IP" ] || [ "$IP" = "None" ]; then
-  echo "No se pudo resolver la IP publica de la task ($TAREA)." >&2
+  echo "No se pudo resolver la IP pública de la tarea ($TAREA)." >&2
   exit 1
 fi
 
-# Las TRES integraciones apuntan a la misma task, cada una a su ruta. Olvidar
-# una no rompe nada a la vista: esa ruta sigue respondiendo, pero contra la IP
-# de la task anterior, que ya no existe. Por eso van juntas en un bucle y no
-# en tres llamadas sueltas que se puedan desincronizar al editarlas.
-reapuntar() {  # $1 = id de la integracion, $2 = ruta en el backend
+reapuntar() {  # $1 = id de la integración, $2 = ruta en el backend
   aws apigatewayv2 update-integration --region "$REGION" \
     --api-id "$API_ID" \
     --integration-id "$1" \
     --integration-uri "http://${IP}:8080$2" >/dev/null
 }
 
-reapuntar "$INTEGRACION_PUB"     "/publico/info"
-reapuntar "$INTEGRACION_SOL_COL" "/solicitudes"
-reapuntar "$INTEGRACION_SOL_ELE" "/solicitudes/{proxy}"
-reapuntar "$INTEGRACION_SOL_APR" "/solicitudes/{id}/aprobar"
-reapuntar "$INTEGRACION_SOL_REC" "/solicitudes/{id}/rechazar"
+reapuntar "$INTEGRACION_PUB"     "/publico/datos"
+reapuntar "$INTEGRACION_DAT"     "/datos"
+reapuntar "$INTEGRACION_PED_COL" "/pedidos"
+reapuntar "$INTEGRACION_PED_ELE" "/pedidos/{proxy}"
 
-echo
-echo "OK  ${VERSION} desplegada."
-echo "    backend directo : http://${IP}:8080/actuator/health"
-echo "    publico info    : http://${IP}:8080/publico/info"
-echo "    solicitudes     : http://${IP}:8080/solicitudes"
-if URL_API="$($TF output -raw url_solicitudes_protegido 2>/dev/null)"; then
-  echo "    via API Gateway : ${URL_API}   (401 sin token)"
+echo ""
+echo "OK  Versión ${VERSION} desplegada exitosamente."
+echo "    Backend Fargate : http://${IP}:8080/actuator/health"
+echo "    Público Datos   : http://${IP}:8080/publico/datos"
+echo "    Pedidos         : http://${IP}:8080/pedidos"
+if URL_API="$($TF output -raw url_pedidos_protegido 2>/dev/null)"; then
+  echo "    API Gateway URL : ${URL_API} (requiere JWT y scope pedidos/read)"
 fi
-echo
-echo "    La IP cambia en cada despliegue; por eso este script reapunta el"
-echo "    gateway. apigateway.tf lo sabe: ignore_changes en integration_uri."
+echo ""

@@ -36,39 +36,46 @@ resource "aws_cognito_user_pool_domain" "hosted_ui" {
   managed_login_version = 1
 }
 
-# Resource Server que define los scopes de la API de negocio
-resource "aws_cognito_resource_server" "solicitudes" {
-  identifier   = "solicitudes"
-  name         = "API de Gestion de Solicitudes de Vacaciones"
+# Resource Server que define los scopes de la API de negocio Pedidos360
+resource "aws_cognito_resource_server" "pedidos" {
+  identifier   = "pedidos"
+  name         = "API de Gestion de Pedidos Pedidos360"
   user_pool_id = aws_cognito_user_pool.pool.id
 
   scope {
     scope_name        = "read"
-    scope_description = "Consultar solicitudes"
+    scope_description = "Consultar pedidos"
   }
 
   scope {
     scope_name        = "write"
-    scope_description = "Crear, modificar y eliminar solicitudes"
-  }
-
-  scope {
-    scope_name        = "approve"
-    scope_description = "Aprobar o rechazar solicitudes"
+    scope_description = "Crear y modificar pedidos"
   }
 }
 
 # Grupos de usuarios que representan los roles del sistema
-resource "aws_cognito_user_group" "solicitantes" {
-  name         = "solicitantes"
+resource "aws_cognito_user_group" "lectores" {
+  name         = "lectores"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Usuarios con rol Solicitante (solicitudes/read, solicitudes/write)"
+  description  = "Usuarios con solo permisos de lectura (pedidos/read)"
 }
 
-resource "aws_cognito_user_group" "aprobadores" {
-  name         = "aprobadores"
+resource "aws_cognito_user_group" "clientes" {
+  name         = "clientes"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Usuarios con rol Aprobador (solicitudes/read, solicitudes/approve)"
+  description  = "Clientes con solo permisos de lectura (pedidos/read)"
+}
+
+resource "aws_cognito_user_group" "editores" {
+  name         = "editores"
+  user_pool_id = aws_cognito_user_pool.pool.id
+  description  = "Usuarios con permisos de lectura y escritura (pedidos/read, pedidos/write)"
+}
+
+resource "aws_cognito_user_group" "administradores" {
+  name         = "administradores"
+  user_pool_id = aws_cognito_user_pool.pool.id
+  description  = "Administradores con permisos de lectura y escritura (pedidos/read, pedidos/write)"
 }
 
 # Cliente público para la Single Page Application (SPA)
@@ -82,7 +89,7 @@ resource "aws_cognito_user_pool_client" "spa" {
   supported_identity_providers         = ["COGNITO"]
 
   # REGLA DE SEGURIDAD OBLIGATORIA (Perímetro RA1):
-  # Los scopes de negocio (solicitudes/*) NO se declaran aquí;
+  # Los scopes de negocio (pedidos/*) NO se declaran aquí;
   # son inyectados exclusivamente por el Lambda Pre-Token V2 según el grupo del usuario.
   allowed_oauth_scopes = [
     "openid",
@@ -115,48 +122,48 @@ resource "aws_cognito_user_pool_client" "spa" {
   }
 
   depends_on = [
-    aws_cognito_resource_server.solicitudes
+    aws_cognito_resource_server.pedidos
   ]
 }
 
-# 1. Usuario Demo con Rol Solicitante
-resource "aws_cognito_user" "solicitante_demo" {
+# 1. Usuario Demo con Rol Lector (Solo lectura: pedidos/read)
+resource "aws_cognito_user" "lector_demo" {
   user_pool_id = aws_cognito_user_pool.pool.id
-  username     = "solicitante@duocuc.cl"
-  password     = "CloudNative2024"
+  username     = "lector@pedidos360.com"
+  password     = "Pedidos360!"
 
   attributes = {
-    email          = "solicitante@duocuc.cl"
+    email          = "lector@pedidos360.com"
     email_verified = true
-    name           = "Empleado Solicitante"
+    name           = "Usuario Lector Demo"
   }
 
   message_action = "SUPPRESS"
 }
 
-resource "aws_cognito_user_in_group" "solicitante_grupo" {
+resource "aws_cognito_user_in_group" "lector_grupo" {
   user_pool_id = aws_cognito_user_pool.pool.id
-  group_name   = aws_cognito_user_group.solicitantes.name
-  username     = aws_cognito_user.solicitante_demo.username
+  group_name   = aws_cognito_user_group.lectores.name
+  username     = aws_cognito_user.lector_demo.username
 }
 
-# 2. Usuario Demo con Rol Aprobador (Jefatura / RRHH)
-resource "aws_cognito_user" "aprobador_demo" {
+# 2. Usuario Demo con Rol Administrador (Lectura y Escritura: pedidos/read, pedidos/write)
+resource "aws_cognito_user" "admin_demo" {
   user_pool_id = aws_cognito_user_pool.pool.id
-  username     = "aprobador@duocuc.cl"
-  password     = "CloudNative2024"
+  username     = "admin@pedidos360.com"
+  password     = "Pedidos360!"
 
   attributes = {
-    email          = "aprobador@duocuc.cl"
+    email          = "admin@pedidos360.com"
     email_verified = true
-    name           = "Jefatura Aprobador"
+    name           = "Administrador Pedidos360"
   }
 
   message_action = "SUPPRESS"
 }
 
-resource "aws_cognito_user_in_group" "aprobador_grupo" {
+resource "aws_cognito_user_in_group" "admin_grupo" {
   user_pool_id = aws_cognito_user_pool.pool.id
-  group_name   = aws_cognito_user_group.aprobadores.name
-  username     = aws_cognito_user.aprobador_demo.username
+  group_name   = aws_cognito_user_group.administradores.name
+  username     = aws_cognito_user.admin_demo.username
 }

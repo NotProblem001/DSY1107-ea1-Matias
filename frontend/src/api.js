@@ -51,14 +51,17 @@ async function realizarPeticion(ruta, opciones = {}) {
 function diagnosticarEstado(status, ruta) {
   switch (status) {
     case 200:
+      return 'HTTP 200 OK: La petición fue autorizada por el Scope Guard de API Gateway y procesada exitosamente por el microservicio Spring Boot.'
     case 201:
-      return 'OK: La petición fue autorizada y procesada exitosamente por el backend.'
+      return 'HTTP 201 Created: El pedido fue creado satisfactoriamente en la base de datos cloud con permisos de escritura (pedidos/write).'
+    case 204:
+      return 'HTTP 204 No Content: El recurso fue eliminado satisfactoriamente de la base de datos.'
     case 401:
-      return '401 Unauthorized: El autorizador JWT de API Gateway rechazó la petición por token ausente, inválido o vencido.'
+      return 'HTTP 401 Unauthorized: El autorizador JWT de API Gateway rechazó la petición en el perímetro por token ausente, firma inválida o sesión expirada.'
     case 403:
-      return '403 Forbidden: API Gateway Scope Guard bloqueó la petición porque el access token no posee el scope requerido.'
+      return 'HTTP 403 Forbidden: API Gateway Scope Guard bloqueó la petición en el perímetro porque el Access Token no posee el scope requerido (ej: lector intentando escribir).'
     case 404:
-      return '404 Not Found: El recurso solicitado no existe en el backend.'
+      return 'HTTP 404 Not Found: El recurso solicitado no existe en la base de datos.'
     case 500:
     case 502:
       return `HTTP ${status}: Error interno o falla de conexión hacia el backend en ECS Fargate.`
@@ -67,106 +70,77 @@ function diagnosticarEstado(status, ruta) {
   }
 }
 
-// 1. Endpoint público de contraste e información del sistema (sin token)
-export async function obtenerInfoPublica() {
-  return realizarPeticion('/publico/info', { method: 'GET' })
+// 1. Endpoint público de contraste (sin token requerido)
+export async function obtenerDatosPublicos() {
+  return realizarPeticion('/publico/datos', { method: 'GET' })
 }
 
-// 2. Consulta de solicitudes (requiere scope: solicitudes/read)
-export async function obtenerSolicitudes(accessToken, solicitanteEmail = null) {
-  const query = solicitanteEmail ? `?solicitante=${encodeURIComponent(solicitanteEmail)}` : ''
-  return realizarPeticion(`/solicitudes${query}`, {
+// 2. Endpoint protegido con scope openid
+export async function obtenerDatosProtegidos(accessToken) {
+  return realizarPeticion('/datos', {
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
 }
 
-// 3. Crear solicitud de vacaciones (requiere scope: solicitudes/write)
-export async function crearSolicitud(accessToken, solicitud) {
-  return realizarPeticion('/solicitudes', {
+// 3. Listar pedidos (requiere scope: pedidos/read)
+export async function obtenerPedidos(accessToken) {
+  return realizarPeticion('/pedidos', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+}
+
+// 4. Obtener pedido por ID (requiere scope: pedidos/read)
+export async function obtenerPedidoPorId(accessToken, id) {
+  return realizarPeticion(`/pedidos/${id}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+}
+
+// 5. Crear pedido (requiere scope: pedidos/write)
+export async function crearPedido(accessToken, pedido) {
+  return realizarPeticion('/pedidos', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(solicitud),
+    body: JSON.stringify(pedido),
   })
 }
 
-// 4. Modificar solicitud de vacaciones (requiere scope: solicitudes/write)
-export async function actualizarSolicitud(accessToken, id, solicitud) {
-  return realizarPeticion(`/solicitudes/${id}`, {
+// 6. Modificar pedido (requiere scope: pedidos/write)
+export async function actualizarPedido(accessToken, id, pedido) {
+  return realizarPeticion(`/pedidos/${id}`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(solicitud),
+    body: JSON.stringify(pedido),
   })
 }
 
-// 5. Eliminar solicitud de vacaciones (requiere scope: solicitudes/write)
-export async function eliminarSolicitud(accessToken, id) {
-  return realizarPeticion(`/solicitudes/${id}`, {
+// 7. Eliminar pedido (requiere scope: pedidos/write)
+export async function eliminarPedido(accessToken, id) {
+  return realizarPeticion(`/pedidos/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
 }
 
-// 6. Aprobar solicitud (requiere scope: solicitudes/approve)
-export async function aprobarSolicitud(accessToken, id, { comentario, aprobadorEmail } = {}) {
-  return realizarPeticion(`/solicitudes/${id}/aprobar`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      comentario: comentario || 'Aprobado según disponibilidad del equipo.',
-      aprobadorEmail: aprobadorEmail || 'aprobador@duocuc.cl',
-    }),
-  })
-}
-
-// 7. Rechazar solicitud (requiere scope: solicitudes/approve)
-export async function rechazarSolicitud(accessToken, id, { comentario, aprobadorEmail } = {}) {
-  return realizarPeticion(`/solicitudes/${id}/rechazar`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      comentario: comentario || 'Rechazado por tope de fechas con otros miembros.',
-      aprobadorEmail: aprobadorEmail || 'aprobador@duocuc.cl',
-    }),
-  })
-}
-
 // 8. Prueba directa sin credenciales (debe devolver 401 Unauthorized en rutas protegidas)
-export async function probarSinToken(ruta = '/solicitudes', metodo = 'GET') {
+export async function probarSinToken(ruta = '/pedidos', metodo = 'GET') {
   return realizarPeticion(ruta, { method: metodo })
 }
 
-// Métodos retrocompatibles
-export async function obtenerDatosPublicos() {
-  return obtenerInfoPublica()
+// Alias de compatibilidad
+export async function obtenerInfoPublica() {
+  return obtenerDatosPublicos()
 }
 
-export async function obtenerDatos(accessToken) {
-  return obtenerSolicitudes(accessToken)
-}
-
-export async function obtenerProductos(accessToken) {
-  return obtenerSolicitudes(accessToken)
-}
-
-export async function crearProducto(accessToken, producto) {
-  return crearSolicitud(accessToken, {
-    solicitanteEmail: 'demo@duocuc.cl',
-    fechaInicio: '2026-03-01',
-    fechaFin: '2026-03-10',
-    dias: 10,
-    motivo: producto?.nombre || 'Vacaciones',
-  })
+export async function obtenerSolicitudes(accessToken) {
+  return obtenerPedidos(accessToken)
 }

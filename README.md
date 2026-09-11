@@ -1,38 +1,105 @@
-# DSY1107 · Experiencia de Aprendizaje 1 (RA1)
-> **Diseño y Despliegue de Solución Cloud Native: Gestión de Solicitudes de Vacaciones con API Manager (API Gateway) e IDaaS (Amazon Cognito)**
+# Pedidos360 · DSY1107 Experiencia de Aprendizaje 1 (RA1)
+> **Diseño y Despliegue de Solución Cloud Native: Sistema de Gestión de Pedidos con API Manager (AWS API Gateway HTTP v2) e Identity as a Service (Amazon Cognito + Lambda Pre-Token Generation V2)**
 
-Repositorio oficial para la **EA1** de la asignatura **Desarrollo Cloud Native I (DSY1107)**. Implementa una arquitectura perimetral desacoplada de extremo a extremo que gestiona, autentica, filtra y securitiza el consumo de APIs a través de estándares abiertos (OAuth 2.0, OpenID Connect, PKCE, Scopes y JWT).
+Repositorio oficial para la **EA1** de la asignatura **Desarrollo Cloud Native I (DSY1107)**. Implementa una arquitectura perimetral desacoplada de extremo a extremo que gestiona, autentica, filtra y securitiza el consumo de APIs a través de estándares abiertos (**OAuth 2.0**, **OpenID Connect**, **PKCE**, **Cognito Scopes**, **JWT Authorizer** y **Spring Boot 3.3.4 con Java 21**).
 
 ---
 
 ## 1. Arquitectura de la Solución (Seguridad Perimetral RA1)
 
-La solución garantiza el control de acceso en el perímetro de la red mediante la integración de:
+```
+       ┌───────────────────────────────┐
+       │     Cliente SPA (React)       │
+       │    http://localhost:5173      │
+       │  o AWS Amplify Hosting (Web)  │
+       └──────────────┬────────────────┘
+                      │
+       1. OAuth2 Code Flow + PKCE (S256)
+                      │
+                      ▼
+       ┌───────────────────────────────┐
+       │      Amazon Cognito IDaaS     │
+       │   User Pool (Tier ESSENTIALS) │
+       │  Resource Server: "pedidos"   │
+       │  Grupos: lectores / clientes  │
+       │   editores / administradores  │
+       └──────────────┬────────────────┘
+                      │
+       2. Invoca Trigger Pre-Token V2
+                      ▼
+       ┌───────────────────────────────┐
+       │    user-token-ms (Lambda)     │
+       │ Inyecta scopes dinámicamente: │
+       │  - lectores -> pedidos/read   │
+       │  - admin -> read + write      │
+       └──────────────┬────────────────┘
+                      │
+       3. Retorna Access Token con claim 'scope'
+                      │
+                      ▼
+       ┌──────────────────────────────────────────────────┐
+       │     AWS API Gateway (HTTP API v2 - Perímetro)    │
+       │  - JWT Authorizer (Valida JWKS + Issuer + Aud)   │
+       │  - Scope Guards:                                 │
+       │      * GET  /publico/datos -> Libre (200 OK)     │
+       │      * GET  /datos         -> scope: openid      │
+       │      * GET  /pedidos       -> scope: pedidos/read│
+       │      * POST /pedidos       -> scope:pedidos/write│
+       └──────────────────────┬───────────────────────────┘
+                              │
+               4. Reenvío por HTTP Proxy
+                              ▼
+       ┌──────────────────────────────────────────────────┐
+       │        Backend Microservicio (Spring Boot)       │
+       │  - Java 21 LTS / Spring Boot 3.3.4               │
+       │  - OAuth2 Resource Server (Defensa en profundidad│
+       │  - Spring Data JPA (PostgreSQL / H2 in-memory)   │
+       │  - ECS Fargate (linux/amd64) en puerto 8080      │
+       └──────────────────────────────────────────────────┘
+```
+
+### Componentes Clave:
 
 1. **Identity as a Service (IDaaS) — Amazon Cognito:**
-   - **User Pool (`ESSENTIALS`):** Directorio de identidades con atributos de correo y grupos (`solicitantes`, `aprobadores`).
-   - **Hosted UI:** Interfaz de inicio de sesión gestionada con soporte PKCE.
-   - **Resource Server (`solicitudes`):** Scopes declarados de grano fino:
-     - `solicitudes/read` ("Consultar solicitudes")
-     - `solicitudes/write` ("Crear, modificar y eliminar solicitudes")
-     - `solicitudes/approve` ("Aprobar o rechazar solicitudes")
-   - **Trigger Pre-Token Generation V2 (`user-token-ms`):** Microservicio Lambda que intercepta la emisión del token e inyecta dinámicamente los scopes en `accessTokenGeneration.scopesToAdd` según los grupos del usuario.
-2. **API Manager — Amazon API Gateway (HTTP API v2 - Scope Guard):**
-   - **JWT Authorizer:** Valida la firma criptográfica (JWKS), emisor (`iss`), expiración y audiencia (`aud` / `client_id`).
-   - **Scope Guard Perimetral:** Autorización estricta por ruta y verbo HTTP:
-     - `GET /publico/info`: Ruta pública informativa (sin autorizador).
-     - `GET /solicitudes` y `GET /solicitudes/{proxy+}`: Requiere `solicitudes/read`.
-     - `POST /solicitudes`, `PUT /solicitudes/{proxy+}`, `DELETE /solicitudes/{proxy+}`: Requiere `solicitudes/write`.
-     - `POST /solicitudes/{id}/aprobar`: Requiere `solicitudes/approve`.
-     - `POST /solicitudes/{id}/rechazar`: Requiere `solicitudes/approve`.
-3. **Backend Microservicio — Spring Boot (Java 21 LTS):**
-   - Contenedor Docker desplegado sobre **AWS ECS Fargate** (`linux/amd64`).
-   - Expone endpoints REST en el puerto 8080 y verificación de salud en `/actuator/health`.
-   - **Libre de lógica de autorización manual**: No evalúa roles ni parsea JWT en el código Java; asume que toda petición recibida fue filtrada por el Scope Guard en API Gateway.
+   - **User Pool (`ESSENTIALS`):** Directorio de usuarios con inicio de sesión por correo y Hosted UI (`managed_login_version = 1`).
+   - **Resource Server (`pedidos`):**
+     * `pedidos/read`: Consultar pedidos.
+     * `pedidos/write`: Crear y modificar pedidos.
+   - **Grupos de Usuarios:**
+     * `lectores` / `clientes`: Acceso de solo lectura (`pedidos/read`).
+     * `editores` / `administradores`: Acceso total de lectura y escritura (`pedidos/read`, `pedidos/write`).
+   - **Microservicio Lambda Pre-Token Generation V2 (`user-token-ms`):**
+     * Inyecta dinámicamente los scopes en `claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd`.
+   - **Regla de Seguridad RA1:** Los scopes de negocio `pedidos/*` **NO** están configurados en el cliente de la SPA en Cognito para evitar que el frontend se auto-conceda scopes sin pasar por el trigger.
+
+2. **Perímetro de Seguridad — AWS API Gateway (HTTP API v2 - Scope Guard):**
+   - **JWT Authorizer:** Valida asimétricamente contra el JWKS del User Pool, verificando emisor (`issuer`) y audiencia (`client_id`).
+   - **CORS Estricto:** Habilitado para `http://localhost:5173` y la URL pública de Amplify (sin barra final), permitiendo métodos `GET, POST, PUT, DELETE, OPTIONS`.
+   - **Scope Guard Perimetral:**
+     * `GET /publico/datos`: Ruta pública de contraste (sin autorizador).
+     * `GET /datos`: Protegido con scope `openid`.
+     * `GET /pedidos` y `GET /pedidos/{proxy+}`: Protegidos con scope `pedidos/read`.
+     * `POST /pedidos`, `PUT /pedidos/{proxy+}`, `DELETE /pedidos/{proxy+}`: Protegidos con scope `pedidos/write`.
+
+3. **Backend Microservicio — Spring Boot 3.3.4 (Java 21):**
+   - **Persistencia Cloud:** Entidad `Pedido` (`id`, `clienteEmail`, `descripcion`, `monto`, `estado`, `fechaCreacion`) con Spring Data JPA.
+   - **Conectividad:** Configurada mediante `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` (compatible con PostgreSQL / H2 in-memory).
+   - **Defensa en Profundidad:** `SecurityConfig.java` valida internamente el token mediante `spring-boot-starter-oauth2-resource-server`.
+   - **Endpoints REST:**
+     * `GET /pedidos`: Listar pedidos.
+     * `GET /pedidos/{id}`: Obtener pedido por ID.
+     * `POST /pedidos`: Crear pedido (retorna `201 Created`).
+     * `PUT /pedidos/{id}`: Actualizar pedido (retorna `200 OK`).
+     * `DELETE /pedidos/{id}`: Eliminar pedido (retorna `204 No Content`).
+     * `GET /publico/datos`: Ruta pública de contraste.
+     * `GET /datos`: Ruta protegida con indicadores del sistema.
+     * `GET /actuator/health`: Endpoint de salud para Fargate.
+
 4. **Frontend SPA — React + Vite:**
-   - Alojado en **AWS Amplify Hosting**.
-   - Implementa flujo Authorization Code con PKCE manual (`auth.js` y `pkce.js`).
-   - Vistas funcionales para Solicitantes y Aprobadores, más consola interactiva de verificación en vivo de la matriz de seguridad.
+   - Flujo OAuth2 + PKCE manual en `src/auth.js` y `src/pkce.js` (S256, sin librerías externas opacas).
+   - Inspector visual de JWT: ID Token (identidad) vs Access Token (scopes).
+   - CRUD completo de Pedidos interactivo.
+   - Consola de pruebas Scope Guard en vivo demostrando los estados HTTP 200, 201, 401 y 403.
 
 ---
 
@@ -40,104 +107,124 @@ La solución garantiza el control de acceso en el perímetro de la red mediante 
 
 ```
 /
-├── .github/workflows/          # Pipelines de CI/CD para compilación y despliegue
-│   ├── backend_compile.yml     # Maven test y build (Java 21)
-│   ├── backend_deploy.yml      # Build Docker amd64, push a ECR y deploy a ECS Fargate
-│   ├── frontend_compile.yml    # npm ci + npm run build
-│   ├── frontend_deploy.yml     # Despliegue estático en AWS Amplify
-│   └── user_token_ms_deploy.yml# Pruebas (node --test) y deploy del Lambda V2
-├── backend/                    # Microservicio Spring Boot (Java 21)
-│   ├── src/                    # Controladores (/solicitudes, /publico/info) y modelos
-│   ├── Dockerfile              # Construcción optimizada para ECS Fargate (amd64)
+├── .github/workflows/
+│   ├── backend_compile.yml     # Java 21 Temurin + ./mvnw clean test
+│   ├── backend_deploy.yml      # Build Docker amd64, push ECR, update ECS y reapunte API Gateway
+│   ├── frontend_compile.yml    # Node 22 + npm ci + npm run build (RUTA_BUILD: frontend/dist)
+│   ├── frontend_deploy.yml     # Inyección config.json y publicación en AWS Amplify
+│   └── user_token_ms_deploy.yml# node --test, zip, actualización Lambda y smoke test
+├── backend/                    # Microservicio Spring Boot (Java 21 LTS)
+│   ├── src/
+│   │   ├── main/java/com/DSY1107/cloudnative/
+│   │   │   ├── CloudnativeApplication.java
+│   │   │   ├── config/SecurityConfig.java
+│   │   │   ├── controller/DatosController.java
+│   │   │   ├── controller/PedidosController.java
+│   │   │   ├── model/Pedido.java
+│   │   │   └── repository/PedidoRepository.java
+│   │   └── test/java/com/DSY1107/cloudnative/
+│   │       └── CloudnativeApplicationTests.java
+│   ├── Dockerfile              # Multi-stage build linux/amd64 (JDK 21 -> JRE 21)
 │   ├── mvnw / mvnw.cmd         # Maven Wrapper
-│   └── pom.xml                 # Dependencias (Spring Boot 3.3, Actuator, Web)
-├── frontend/                   # Aplicación Web SPA (React + Vite)
-│   ├── public/                 # Contenedor estático para config.json generado en runtime
-│   ├── src/                    # auth.js (PKCE), api.js (HTTP Client), App.jsx
+│   └── pom.xml                 # Spring Boot 3.3.4, JPA, OAuth2 Resource Server, H2, PostgreSQL
+├── frontend/                   # SPA React + Vite
+│   ├── public/config.example.json
+│   ├── src/
+│   │   ├── api.js              # Cliente hacia API Gateway con diagnóstico
+│   │   ├── auth.js             # Flujo PKCE, canje /token y decodificación JWT
+│   │   ├── pkce.js             # Generador de verifier y challenge SHA-256
+│   │   ├── App.jsx             # UI modular (CRUD, consola Scope Guard e Inspector JWT)
+│   │   ├── main.jsx
+│   │   └── styles.css
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.js          # Puerto estricto 5173
-├── terraform/                  # Infraestructura como Código (AWS)
-│   ├── versions.tf             # Proveedor AWS (~> 5.100) y tags del estudiante
-│   ├── variables.tf            # Variables parametrizables (región, estudiante, LabRole)
-│   ├── cognito.tf              # User Pool, Hosted UI, Resource Server, Groups, SPA Client
-│   ├── apigateway.tf           # HTTP API, JWT Authorizer, Rutas con Scope Guard, CORS
-│   ├── amplify.tf              # Hosting WEB en Amplify con regla de reescritura SPA
-│   ├── ecs.tf                  # ECR, Cluster ECS, Task Definition y Fargate Service
-│   ├── lambda.tf               # Lambda user-token-ms y permiso para Cognito
-│   └── outputs.tf              # Endpoints, IDs de integración y configuración de entorno
+├── terraform/                  # Infraestructura como Código (AWS Academy Learner Lab)
+│   ├── versions.tf             # Provider AWS ~> 5.100 y archive ~> 2.4
+│   ├── variables.tf            # Variables parametrizables
+│   ├── cognito.tf              # User Pool ESSENTIALS, Resource Server pedidos, grupos y demo users
+│   ├── lambda.tf               # Lambda Pre-Token V2 (LabRole dinámico)
+│   ├── apigateway.tf           # HTTP API v2, JWT Authorizer y Scope Guards
+│   ├── amplify.tf              # Hosting WEB con regla custom de reescritura SPA
+│   ├── ecs.tf                  # ECR force_delete, ECS Cluster, Task Fargate 512/1024 y ruta 0.0.0.0/0
+│   └── outputs.tf              # Outputs consolidados sin duplicidad y bloques env_frontend
 ├── user-token-ms/              # Lambda Pre-Token Generation V2
-│   ├── index.mjs               # Inyección dinámica de scopesToAdd (solicitantes, aprobadores)
+│   ├── index.mjs               # Inyección de pedidos/read y pedidos/write
 │   └── test/index.test.mjs     # Pruebas unitarias nativas (node --test)
-├── scripts/                    # Scripts de automatización del ciclo de vida
-│   ├── config-frontend.sh      # Genera public/config.json a partir de outputs
-│   ├── publicar-amplify.sh     # Empaqueta y sube build a Amplify
-│   └── publicar-ecs.sh         # Compila JAR, sube a ECR y reapunta API Gateway
-├── VERIFICACION_REPOSITORIO_EA1.md # Manual oficial de verificación y checklist
-├── .gitignore                  # Exclusiones estrictas de seguridad (tfstate, env, binarios)
-└── README.md                   # Documentación general
+├── scripts/                    # Scripts de ciclo de vida
+│   ├── config-frontend.sh      # Genera public/config.json
+│   ├── publicar-amplify.sh     # Publica zip en AWS Amplify
+│   └── publicar-ecs.sh         # Compila JAR, imagen Docker amd64 y reapunta API Gateway
+├── VERIFICACION_REPOSITORIO_EA1.md # Matriz de evaluación y comandos cURL
+└── README.md                   # Documentación oficial
 ```
 
 ---
 
-## 3. Matriz de Pruebas de Seguridad y Comprobación (Scope Guard RA1)
+## 3. Matriz de Seguridad y Códigos HTTP Demostrables
 
-| Escenario | Método y Endpoint | Token / Rol | Código HTTP | Diagnóstico Técnico |
-| :--- | :--- | :--- | :--- | :--- |
-| **1. Sin Token** | `GET /solicitudes` | Ninguno | `401 Unauthorized` | API Gateway Authorizer rechaza antes de llegar al backend |
-| **2. Endpoint Público** | `GET /publico/info` | Ninguno | `200 OK` | Ruta sin autorizador configurado (contraste) |
-| **3. Consulta Solicitante** | `GET /solicitudes` | Grupo `solicitantes` | `200 OK` | Token contiene scope `solicitudes/read` |
-| **4. Creación Solicitante** | `POST /solicitudes` | Grupo `solicitantes` | `201 Created` | Token contiene scope `solicitudes/write` |
-| **5. Intento Ilegal Solicitante** | `POST /solicitudes/1/aprobar` | Grupo `solicitantes` | `403 Forbidden` | API Gateway Scope Guard bloquea por falta de `solicitudes/approve` |
-| **6. Aprobación Jefatura** | `POST /solicitudes/1/aprobar` | Grupo `aprobadores` | `200 OK` | Token contiene scope `solicitudes/approve` |
-| **7. Intento Ilegal Aprobador** | `POST /solicitudes` | Grupo `aprobadores` | `403 Forbidden` | API Gateway Scope Guard bloquea por falta de `solicitudes/write` |
+| Escenario | Método y Endpoint | Credenciales / Token | Código HTTP | Diagnóstico y Comportamiento |
+| :---: | :--- | :--- | :---: | :--- |
+| **1. Ruta Pública** | `GET /publico/datos` | Ninguno | **`200 OK`** | Acceso público sin autorizador (contraste). |
+| **2. Petición Anónima** | `GET /pedidos` | Ninguno | **`401 Unauthorized`** | Rechazada en el borde por JWT Authorizer de API Gateway. |
+| **3. Lectura Permitida** | `GET /pedidos` | Lector (`pedidos/read`) | **`200 OK`** | API Gateway valida scope `pedidos/read` y responde con pedidos. |
+| **4. Creación Permitida** | `POST /pedidos` | Admin (`pedidos/write`)| **`201 Created`** | API Gateway valida scope `pedidos/write` y backend persiste el pedido. |
+| **5. Intento Ilegal Lector**| `POST /pedidos` | Lector (solo `pedidos/read`)| **`403 Forbidden`** | **Prueba RA1:** Rechazada en el perímetro por Scope Guard (falta `pedidos/write`). |
+| **6. Eliminación Permitida**| `DELETE /pedidos/{id}`| Admin (`pedidos/write`)| **`204 No Content`**| Pedido eliminado exitosamente de la base de datos. |
 
 ---
 
-## 4. Guía de Ejecución Local y Despliegue
+## 4. Guía de Ejecución Local y Pruebas
 
-### 4.1. Despliegue de Infraestructura con Terraform
+### 4.1. Pruebas Unitarias del Microservicio Lambda Pre-Token V2
+```bash
+cd user-token-ms
+node --test
+```
+*Resultado: 6 pruebas unitarias exitosas (cobertura total de grupos y scopes).*
+
+### 4.2. Compilación y Pruebas del Backend Spring Boot
+```bash
+cd backend
+./mvnw clean test
+```
+*Resultado: 7 pruebas de integración exitosas con MockMvc (CRUD de pedidos, seguridad interna y salud).*
+
+### 4.3. Compilación del Frontend React + Vite
+```bash
+cd frontend
+npm ci
+npm run build
+```
+*Resultado: Compilación limpia a `frontend/dist` sin errores sintácticos.*
+
+### 4.4. Despliegue de Infraestructura con Terraform
 ```bash
 cd terraform
 terraform init
 terraform apply -auto-approve
 
-# Generar variables de entorno para el frontend local:
+# Generar archivo de configuración local:
 terraform output -raw frontend_env > ../frontend/.env
 ```
 
-### 4.2. Ejecución del Frontend en Local
+### 4.5. Ejecución del Frontend en Local
 ```bash
 cd frontend
-npm ci
 npm run dev
 ```
 Abre en el navegador: `http://localhost:5173`
 
-> **Cuentas de prueba precargadas:**
-> - **Solicitante:** `solicitante@duocuc.cl` / `CloudNative2024` (Grupo: `solicitantes`)
-> - **Aprobador:** `aprobador@duocuc.cl` / `CloudNative2024` (Grupo: `aprobadores`)
-
-### 4.3. Pruebas Unitarias del Microservicio Lambda
-```bash
-cd user-token-ms
-node --test
-```
-
-### 4.4. Compilación del Backend Spring Boot
-```bash
-cd backend
-./mvnw clean test
-```
+> **Cuentas Demo Precargadas en Cognito:**
+> - **Lector / Cliente (Solo lectura `pedidos/read`):**
+>   - Correo: `lector@pedidos360.com`
+>   - Contraseña: `Pedidos360!`
+> - **Editor / Administrador (Lectura y escritura `pedidos/read`, `pedidos/write`):**
+>   - Correo: `admin@pedidos360.com`
+>   - Contraseña: `Pedidos360!`
 
 ---
 
-## 5. Configuración de Secretos en GitHub Actions
+## 5. Verificación con Comandos cURL
 
-Para los despliegues automatizados en AWS Academy Learner Lab, configura los siguientes secretos en el repositorio (`Settings -> Secrets and variables -> Actions`):
-
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_SESSION_TOKEN`
-
-*(Recuerda renovar estos valores al iniciar cada sesión del laboratorio).*
+Revisa la guía completa con ejemplos paso a paso en [VERIFICACION_REPOSITORIO_EA1.md](file:///c:/Workspace/DSY1107-ea1-Matias/VERIFICACION_REPOSITORIO_EA1.md).

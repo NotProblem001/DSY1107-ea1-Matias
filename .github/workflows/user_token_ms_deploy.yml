@@ -112,8 +112,8 @@ jobs:
             "triggerSource": "TokenGeneration_HostedAuth",
             "userName": "smoke-test",
             "request": {
-              "userAttributes": { "email": "smoke@ci" },
-              "groupConfiguration": { "groupsToOverride": ["solicitantes"] }
+              "userAttributes": { "email": "smoke@pedidos360.com" },
+              "groupConfiguration": { "groupsToOverride": ["administradores"] }
             },
             "response": {}
           }
@@ -126,9 +126,9 @@ jobs:
             salida.json > /dev/null
 
           scopes=$(jq -c '.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd' salida.json)
-          echo "Scopes devueltos para un solicitante: $scopes"
+          echo "Scopes devueltos para un administrador: $scopes"
 
-          if [ "$scopes" != '["solicitudes/read","solicitudes/write"]' ]; then
+          if [ "$scopes" != '["pedidos/read","pedidos/write"]' ]; then
             echo "::error::El Lambda desplegado no concede los scopes esperados: $scopes"
             jq . salida.json
             exit 1
@@ -137,5 +137,5 @@ jobs:
           {
             echo "### Lambda Pre-Token V2 Desplegado"
             echo ""
-            echo "Verificación: Usuario en grupo \`solicitantes\` recibe: \`${scopes}\`"
+            echo "Verificación: Usuario en grupo \`administradores\` recibe: \`${scopes}\`"
           } >> "$GITHUB_STEP_SUMMARY"
