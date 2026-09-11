@@ -62,6 +62,7 @@ export default function App() {
   const emailUsuario = idClaims?.email ?? idClaims?.['cognito:username'] ?? ''
   const gruposUsuario = idClaims?.['cognito:groups'] || []
   const scopesTokens = accessClaims?.scope ? accessClaims.scope.split(' ') : []
+  const puedeEscribir = scopesTokens.includes('pedidos/write')
 
   // Cargar pedidos cuando haya token
   async function cargarListaPedidos() {
@@ -217,25 +218,29 @@ export default function App() {
 
               <dt>Grupo(s) Cognito</dt>
               <dd className="mono">
-                {gruposUsuario.length > 0 ? (
-                  gruposUsuario.map(g => (
-                    <span key={g} className="badge badge-scope destacado">{g}</span>
-                  ))
-                ) : (
-                  '(sin grupo asignado)'
-                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {gruposUsuario.length > 0 ? (
+                    gruposUsuario.map(g => (
+                      <span key={g} className="badge badge-scope destacado">{g}</span>
+                    ))
+                  ) : (
+                    '(sin grupo asignado)'
+                  )}
+                </div>
               </dd>
 
               <dt>Scopes en Access Token</dt>
               <dd>
-                {scopesTokens.map((s) => (
-                  <span
-                    key={s}
-                    className={`badge badge-scope ${s.startsWith('pedidos') ? 'destacado' : ''}`}
-                  >
-                    {s}
-                  </span>
-                ))}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {scopesTokens.map((s) => (
+                    <span
+                      key={s}
+                      className={`badge badge-scope ${s.startsWith('pedidos') ? 'destacado' : ''}`}
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
               </dd>
 
               <dt>Estado del Token</dt>
@@ -287,6 +292,17 @@ export default function App() {
               <p className="sub">
                 Visualización y creación de pedidos en Spring Boot Fargate vía API Gateway. Requiere scopes <code>pedidos/read</code> para lectura y <code>pedidos/write</code> para creación/modificación.
               </p>
+
+              {!puedeEscribir && (
+                <div className="info-box" style={{ borderColor: 'var(--aviso)', background: 'rgba(246, 193, 119, 0.08)', marginBottom: '1.25rem' }}>
+                  <strong>Rol de Solo Lectura ({emailUsuario}):</strong> Tu cuenta pertenece al grupo <code>{gruposUsuario.join(', ') || 'lectores'}</code> con permiso de lectura (<code>pedidos/read</code>).
+                  <br />
+                  <span style={{ fontSize: '0.86rem' }}>
+                    Puedes consultar pedidos, pero <strong>no posees permisos de escritura</strong> (<code>pedidos/write</code>).
+                    Si intentas registrar un pedido con el formulario inferior, el <strong>Scope Guard de API Gateway</strong> rechazará la petición en el perímetro con <strong>HTTP 403 Forbidden</strong> para demostrar el filtrado perimetral del RA1. Para crear o modificar pedidos con respuesta HTTP 201 Created, cierra sesión e inicia con <code>admin@pedidos360.com</code>.
+                  </span>
+                </div>
+              )}
 
               {/* Formulario de Nuevo Pedido */}
               <form onSubmit={handleCrearPedido} style={{ marginBottom: '1.5rem' }}>
