@@ -62,11 +62,17 @@ export default function App() {
   const emailUsuario = idClaims?.email ?? idClaims?.['cognito:username'] ?? ''
   const gruposUsuario = idClaims?.['cognito:groups'] || []
   const scopesTokens = accessClaims?.scope ? accessClaims.scope.split(' ') : []
-  const puedeEscribir = scopesTokens.includes('pedidos/write')
 
-  // Determinación de los 3 tipos de usuarios del sistema
-  const esAdmin = scopesTokens.includes('pedidos/write') || gruposUsuario.includes('administradores') || gruposUsuario.includes('editores')
-  const esLector = !esAdmin && (scopesTokens.includes('pedidos/read') || gruposUsuario.includes('lectores') || gruposUsuario.includes('clientes'))
+  // Permisos granulares de negocio (soporta tanto solicitudes/* como pedidos/*)
+  const puedeLeer = scopesTokens.some(s => s.endsWith('/read')) || gruposUsuario.length > 0
+  const puedeCrear = scopesTokens.some(s => s.endsWith('/write')) || gruposUsuario.includes('clientes') || gruposUsuario.includes('administradores')
+  const puedeAprobar = scopesTokens.some(s => s.endsWith('/approve')) || gruposUsuario.includes('editores') || gruposUsuario.includes('administradores')
+
+  // Identificación de los 3 Perfiles Demo + Admin
+  const esAdmin = gruposUsuario.includes('administradores')
+  const esEditor = !esAdmin && (gruposUsuario.includes('editores') || puedeAprobar)
+  const esCliente = !esAdmin && !esEditor && (gruposUsuario.includes('clientes') || puedeCrear)
+  const esLector = !esAdmin && !esEditor && !esCliente && (gruposUsuario.includes('lectores') || puedeLeer)
 
   // Cargar pedidos cuando haya token
   async function cargarListaPedidos() {
@@ -192,46 +198,49 @@ export default function App() {
             No hay sesión activa. Para interactuar con el sistema puedes iniciar el flujo <strong>Authorization Code con PKCE</strong> mediante el Hosted UI de Cognito o probar el acceso público.
           </p>
 
-          {/* Comparativa Explícita de los 3 Tipos de Usuarios */}
+          {/* Matriz de los 3 Perfiles Demo */}
           <div style={{ marginTop: '1.25rem', marginBottom: '1.5rem' }}>
             <h3 style={{ margin: '0 0 0.75rem', color: 'var(--texto)' }}>
-              Matriz de los 3 Perfiles de Usuario en Pedidos360:
+              Matriz de Roles y Scopes en Pedidos360:
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-              {/* Perfil 1: Público */}
+              {/* Perfil 1: Lector */}
               <div style={{ background: '#131825', border: '1px solid var(--borde)', borderRadius: '8px', padding: '1rem' }}>
-                <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>1. Usuario Público</span>
+                <span className="badge badge-aviso">1. Lector</span>
                 <p style={{ fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                  <strong>Sin autenticación:</strong> Puede acceder únicamente a datos abiertos de contraste (<code>GET /publico/datos</code>). No tiene acceso a pedidos (401).
+                  <strong>Solo Lectura:</strong> <code>lector@pedidos360.com</code> (Grupo <code>lectores</code> &rarr; Scope <code>solicitudes/read</code>). Puede consultar pedidos. Bloqueado para crear y aprobar.
                 </p>
               </div>
 
-              {/* Perfil 2: Lector */}
+              {/* Perfil 2: Cliente */}
               <div style={{ background: '#131825', border: '1px solid var(--borde)', borderRadius: '8px', padding: '1rem' }}>
-                <span className="badge badge-aviso">2. Usuario Lector</span>
+                <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>2. Cliente</span>
                 <p style={{ fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                  <strong>Solo Lectura:</strong> <code>lector@pedidos360.com</code> (Scope <code>pedidos/read</code>). Puede consultar pedidos. <strong>Sin permisos de escritura/modificación</strong>.
+                  <strong>Lectura y Creación:</strong> <code>cliente@pedidos360.com</code> (Grupo <code>clientes</code> &rarr; Scopes <code>solicitudes/read</code>, <code>solicitudes/write</code>). Puede registrar nuevos pedidos.
                 </p>
               </div>
 
-              {/* Perfil 3: Administrador */}
+              {/* Perfil 3: Editor */}
               <div style={{ background: '#131825', border: '1px solid var(--borde)', borderRadius: '8px', padding: '1rem' }}>
-                <span className="badge badge-ok">3. Usuario Administrador</span>
+                <span className="badge badge-ok">3. Editor</span>
                 <p style={{ fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                  <strong>Control Total:</strong> <code>admin@pedidos360.com</code> (Scopes <code>pedidos/read</code> y <code>pedidos/write</code>). Puede consultar, crear, modificar y eliminar pedidos.
+                  <strong>Lectura y Aprobación:</strong> <code>editor@pedidos360.com</code> (Grupo <code>editores</code> &rarr; Scopes <code>solicitudes/read</code>, <code>solicitudes/approve</code>). Puede aprobar y cambiar estados.
                 </p>
               </div>
             </div>
           </div>
 
           <div className="info-box">
-            <strong>Credenciales Demo para Evaluación (Contraseña: <code>Pedidos360!</code>):</strong>
+            <strong>Cuentas demo precargadas para evaluación (Contraseña: <code>Pedidos360!</code>):</strong>
             <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
               <li>
-                <strong>Lector / Cliente:</strong> <code>lector@pedidos360.com</code> &rarr; Scope asignado por Lambda V2: <code>pedidos/read</code> (Solo lectura).
+                <strong>Lector:</strong> <code>lector@pedidos360.com</code> (Grupo: <code>lectores</code> &rarr; Scopes: <code>solicitudes/read</code>)
               </li>
               <li>
-                <strong>Administrador / Editor:</strong> <code>admin@pedidos360.com</code> &rarr; Scopes asignados por Lambda V2: <code>pedidos/read</code> y <code>pedidos/write</code> (Lectura y Escritura).
+                <strong>Cliente:</strong> <code>cliente@pedidos360.com</code> (Grupo: <code>clientes</code> &rarr; Scopes: <code>solicitudes/read</code>, <code>solicitudes/write</code>)
+              </li>
+              <li>
+                <strong>Editor:</strong> <code>editor@pedidos360.com</code> (Grupo: <code>editores</code> &rarr; Scopes: <code>solicitudes/read</code>, <code>solicitudes/approve</code>)
               </li>
             </ul>
           </div>
@@ -254,32 +263,52 @@ export default function App() {
           <section>
             <h2>Sesión Activa</h2>
 
-            {/* Banner Explícito del Tipo de Usuario Autenticado */}
+            {/* Banner Explícito del Rol Autenticado */}
             <div style={{ marginBottom: '1rem' }}>
               {esAdmin ? (
                 <div style={{ background: 'rgba(87, 217, 163, 0.12)', border: '1px solid var(--ok)', borderRadius: '8px', padding: '0.75rem 1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span className="badge badge-ok" style={{ margin: 0 }}>⚡ PERFIL 3: ADMINISTRADOR / EDITOR</span>
-                    <strong>Control Total de Pedidos</strong>
+                    <span className="badge badge-ok" style={{ margin: 0 }}>⚡ ROL ADMINISTRADOR</span>
+                    <strong>Control Total del Sistema</strong>
                   </div>
                   <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', color: 'var(--texto)' }}>
-                    Posees permisos de lectura y escritura (<code>pedidos/read</code>, <code>pedidos/write</code>). Tienes acceso a registrar pedidos, modificar su estado y eliminarlos.
+                    Posees permisos de lectura, creación y aprobación completa (scopes <code>solicitudes/read</code>, <code>solicitudes/write</code>, <code>solicitudes/approve</code>).
+                  </p>
+                </div>
+              ) : esEditor ? (
+                <div style={{ background: 'rgba(87, 217, 163, 0.12)', border: '1px solid var(--ok)', borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="badge badge-ok" style={{ margin: 0 }}>⚖️ ROL EDITOR</span>
+                    <strong>Lectura y Aprobación de Pedidos</strong>
+                  </div>
+                  <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', color: 'var(--texto)' }}>
+                    Posees permisos de consulta y aprobación (scopes <code>solicitudes/read</code> y <code>solicitudes/approve</code>). Puedes aprobar y gestionar estados. Creación bloqueada.
+                  </p>
+                </div>
+              ) : esCliente ? (
+                <div style={{ background: 'rgba(110, 168, 254, 0.12)', border: '1px solid var(--acento)', borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="badge badge-scope" style={{ margin: 0 }}>✍️ ROL CLIENTE</span>
+                    <strong>Lectura y Creación de Pedidos</strong>
+                  </div>
+                  <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', color: 'var(--texto)' }}>
+                    Posees permisos de consulta y registro de nuevos pedidos (scopes <code>solicitudes/read</code> y <code>solicitudes/write</code>). Aprobación reservada a Editores.
                   </p>
                 </div>
               ) : esLector ? (
                 <div style={{ background: 'rgba(246, 193, 119, 0.12)', border: '1px solid var(--aviso)', borderRadius: '8px', padding: '0.75rem 1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span className="badge badge-aviso" style={{ margin: 0 }}>👁️ PERFIL 2: LECTOR / CLIENTE</span>
+                    <span className="badge badge-aviso" style={{ margin: 0 }}>👁️ ROL LECTOR</span>
                     <strong>Modo Solo Lectura</strong>
                   </div>
                   <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', color: 'var(--texto)' }}>
-                    Posees permisos de consulta (<code>pedidos/read</code>). <strong>No tienes permisos de creación ni modificación (pedidos/write)</strong>. El formulario de creación y los botones de acción están restringidos para tu perfil.
+                    Posees permisos de consulta (scope <code>solicitudes/read</code>). <strong>No tienes permisos de creación ni aprobación</strong>. Los formularios de registro y botones de acción están bloqueados.
                   </p>
                 </div>
               ) : (
                 <div style={{ background: 'rgba(110, 168, 254, 0.12)', border: '1px solid var(--acento)', borderRadius: '8px', padding: '0.75rem 1rem' }}>
                   <span className="badge badge-scope">USUARIO AUTENTICADO ESTÁNDAR</span>
-                  <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem' }}>Sin scopes de negocio específicos de pedidos.</p>
+                  <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem' }}>Sin scopes de negocio específicos.</p>
                 </div>
               )}
             </div>
@@ -341,13 +370,13 @@ export default function App() {
               className={`tab-boton ${pestanaActiva === 'pedidos' ? 'activo' : ''}`}
               onClick={() => setPestanaActiva('pedidos')}
             >
-              Gestión de Pedidos {esLector ? '(Solo Lectura)' : '(Control Total)'}
+              Gestión de Pedidos {puedeCrear ? '(Creación Habilitada)' : puedeAprobar ? '(Aprobación Habilitada)' : '(Solo Lectura)'}
             </button>
             <button
               className={`tab-boton ${pestanaActiva === 'seguridad' ? 'activo' : ''}`}
               onClick={() => setPestanaActiva('seguridad')}
             >
-              Consola Scope Guard (3 Perfiles)
+              Consola Scope Guard (3 Perfiles RA1)
             </button>
             <button
               className={`tab-boton ${pestanaActiva === 'tokens' ? 'activo' : ''}`}
@@ -363,16 +392,20 @@ export default function App() {
               <h2>Listado de Pedidos</h2>
               <p className="sub">
                 {esAdmin
-                  ? 'Visualización y administración activa de pedidos. Tu perfil cuenta con permisos de lectura y escritura.'
-                  : 'Visualización de pedidos en modo Solo Lectura. Tu perfil cuenta con permisos de consulta y no puede crear ni modificar registros.'}
+                  ? 'Visualización, creación y aprobación activa de pedidos (Control Total Administrador).'
+                  : esCliente
+                  ? 'Visualización y creación activa de nuevos pedidos (Rol Cliente).'
+                  : esEditor
+                  ? 'Visualización y aprobación de pedidos (Rol Editor).'
+                  : 'Visualización de pedidos en modo Solo Lectura (Rol Lector).'}
               </p>
 
-              {/* Formulario de Nuevo Pedido (Exclusivo o Restringido según Perfil) */}
-              {esAdmin ? (
+              {/* Formulario de Nuevo Pedido */}
+              {puedeCrear ? (
                 <form onSubmit={handleCrearPedido} style={{ marginBottom: '1.5rem', background: '#121824', padding: '1rem', borderRadius: '8px', border: '1px solid var(--borde)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <h3 style={{ margin: 0, color: 'var(--ok)' }}>⚡ Registrar Nuevo Pedido (Habilitado para Administrador)</h3>
-                    <span className="badge badge-ok">pedidos/write</span>
+                    <h3 style={{ margin: 0, color: 'var(--ok)' }}>✍️ Registrar Nuevo Pedido (Habilitado para Cliente / Administrador)</h3>
+                    <span className="badge badge-ok">solicitudes/write</span>
                   </div>
                   <div className="form-grid">
                     <div className="form-campo" style={{ gridColumn: '1 / -1' }}>
@@ -413,19 +446,19 @@ export default function App() {
                   </button>
                 </form>
               ) : (
-                /* Vista para Lector: Formulario Bloqueado Explicando la Restricción */
+                /* Vista para Lector o Editor: Formulario Bloqueado Explicando la Restricción */
                 <div style={{ marginBottom: '1.5rem', background: '#111624', padding: '1rem', borderRadius: '8px', border: '1px dashed var(--borde)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <h3 style={{ margin: 0, color: 'var(--aviso)' }}>🔒 Registro de Pedidos Bloqueado (Rol Lector)</h3>
-                    <span className="badge badge-aviso">Solo Lectura</span>
+                    <h3 style={{ margin: 0, color: 'var(--aviso)' }}>🔒 Registro de Pedidos Bloqueado ({esEditor ? 'Rol Editor' : 'Rol Lector'})</h3>
+                    <span className="badge badge-aviso">{esEditor ? 'Solo Aprobación' : 'Solo Lectura'}</span>
                   </div>
                   <p style={{ fontSize: '0.85rem', color: 'var(--tenue)', margin: '0 0 0.75rem' }}>
-                    Tu cuenta <strong>{emailUsuario}</strong> no tiene permisos de escritura (carece de <code>pedidos/write</code>).
-                    Para registrar un nuevo pedido debes iniciar sesión como Administrador (<code>admin@pedidos360.com</code>).
+                    Tu cuenta <strong>{emailUsuario}</strong> no tiene permisos de creación (carece de <code>solicitudes/write</code>).
+                    Para registrar un nuevo pedido debes iniciar sesión como Cliente (<code>cliente@pedidos360.com</code>) o Administrador.
                   </p>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button type="button" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-                      🚫 Creación Deshabilitada para Lectores
+                      🚫 Creación Deshabilitada para tu Rol
                     </button>
                     <button
                       type="button"
@@ -482,30 +515,31 @@ export default function App() {
                           </td>
                           <td>{p.fechaCreacion ? p.fechaCreacion.substring(0, 19).replace('T', ' ') : '—'}</td>
                           <td>
-                            {esAdmin ? (
-                              /* Acciones completas para Administrador */
+                            {puedeAprobar || esAdmin ? (
                               <div style={{ display: 'flex', gap: '0.3rem' }}>
                                 {p.estado !== 'COMPLETADO' && (
                                   <button
                                     disabled={cargando}
                                     onClick={() => handleCambiarEstado(p.id, 'COMPLETADO')}
                                     style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--ok)' }}
+                                    title="Aprobar pedido (requiere scope solicitudes/approve)"
                                   >
-                                    Completar
+                                    Aprobar / Completar
                                   </button>
                                 )}
-                                <button
-                                  disabled={cargando}
-                                  onClick={() => handleEliminar(p.id)}
-                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--mal)' }}
-                                >
-                                  Eliminar
-                                </button>
+                                {esAdmin && (
+                                  <button
+                                    disabled={cargando}
+                                    onClick={() => handleEliminar(p.id)}
+                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--mal)' }}
+                                  >
+                                    Eliminar
+                                  </button>
+                                )}
                               </div>
                             ) : (
-                              /* Lector: Sin acciones de modificación */
                               <span className="badge" style={{ background: '#1c2438', color: 'var(--tenue)', margin: 0 }}>
-                                🔒 Sin permiso de modificación
+                                {esCliente ? '🔒 Aprobación reservada a Editores' : '🔒 Solo Lectura'}
                               </span>
                             )}
                           </td>
@@ -528,14 +562,14 @@ export default function App() {
             <section>
               <h2>Consola de Verificación Scope Guard (RA1)</h2>
               <p className="sub" style={{ margin: '0 0 1rem' }}>
-                Demostración del control de acceso perimetral según los 3 perfiles de usuario del sistema:
+                Demostración del control de acceso perimetral según los 3 perfiles de evaluación:
               </p>
 
               <div className="grid-pruebas">
                 {/* 1. Acceso como Usuario Público */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>Perfil: Público</span>
+                    <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>Público</span>
                     <h4>1. Ruta Abierta (/publico/datos)</h4>
                     <p>Acceso anónimo libre sin autorizador en API Gateway.</p>
                   </div>
@@ -550,7 +584,7 @@ export default function App() {
                 {/* 2. Público intentando entrar a ruta privada */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>Perfil: Público</span>
+                    <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>Público</span>
                     <h4>2. Consulta Privada Sin Token</h4>
                     <p>API Gateway bloquea por falta de Authorization Bearer.</p>
                   </div>
@@ -562,12 +596,12 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* 3. Lector consultando pedidos */}
+                {/* 3. Lectura de Pedidos (Lector, Cliente, Editor) */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <span className="badge badge-aviso">Perfil: Lector</span>
+                    <span className="badge badge-aviso">Lector / Cliente / Editor</span>
                     <h4>3. Lectura de Pedidos (GET /pedidos)</h4>
-                    <p>Requiere scope <code>pedidos/read</code>. Permitido para Lectores y Admins.</p>
+                    <p>Requiere scope <code>solicitudes/read</code>. Permitido para los 3 roles.</p>
                   </div>
                   <button
                     className="primario"
@@ -578,17 +612,17 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* 4. Lector intentando crear pedido */}
+                {/* 4. Creación de Pedidos (Cliente) */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <span className="badge badge-aviso">Perfil: Lector</span>
-                    <h4>4. Intento Escritura Lector</h4>
-                    <p>Scope Guard bloquea en el borde por falta de <code>pedidos/write</code>.</p>
+                    <span className="badge" style={{ background: '#222d45', color: '#90b4fe' }}>Cliente</span>
+                    <h4>4. Creación de Pedidos (POST /pedidos)</h4>
+                    <p>Requiere scope <code>solicitudes/write</code>. Autorizado para Cliente; 403 para Lector y Editor.</p>
                   </div>
                   <button
                     disabled={cargando}
                     onClick={() =>
-                      ejecutarAccion('4. Intento Escritura Lector (POST /pedidos)', () =>
+                      ejecutarAccion('4. Creación Pedido (POST /pedidos)', () =>
                         crearPedido(tokens.access_token, {
                           clienteEmail: emailUsuario,
                           descripcion: 'Dispositivo IoT Sensor de Temperatura Industrial',
@@ -598,38 +632,39 @@ export default function App() {
                       )
                     }
                   >
-                    Probar (201 Admin / 403 Lector)
+                    Probar (201 Cliente / 403 Lector, Editor)
                   </button>
                 </div>
 
-                {/* 5. Administrador creando pedido */}
+                {/* 5. Aprobación de Pedidos (Editor) */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <span className="badge badge-ok">Perfil: Administrador</span>
-                    <h4>5. Creación Pedido (Admin)</h4>
-                    <p>Autorizado por poseer scope <code>pedidos/write</code>.</p>
+                    <span className="badge badge-ok">Editor</span>
+                    <h4>5. Aprobación Pedido (PUT /pedidos/1)</h4>
+                    <p>Requiere scope <code>solicitudes/approve</code>. Autorizado para Editor; 403 para Lector y Cliente.</p>
                   </div>
                   <button
                     disabled={cargando}
                     onClick={() =>
-                      ejecutarAccion('5. Creación Pedido Admin (POST /pedidos)', () =>
-                        crearPedido(tokens.access_token, {
-                          clienteEmail: emailUsuario || 'admin@pedidos360.com',
-                          descripcion: 'Servidor Blade HPE ProLiant Gen11',
-                          monto: 4950000,
-                          estado: 'PENDIENTE',
+                      ejecutarAccion('5. Aprobación Pedido (PUT /pedidos/1)', () =>
+                        actualizarPedido(tokens.access_token, 1, {
+                          id: 1,
+                          clienteEmail: 'cliente@pedidos360.com',
+                          descripcion: 'Servidor Dell PowerEdge R750',
+                          monto: 3599990.0,
+                          estado: 'COMPLETADO',
                         }), true
                       )
                     }
                   >
-                    Crear (201 Admin / 403 Lector)
+                    Probar (200 Editor / 403 Lector, Cliente)
                   </button>
                 </div>
 
                 {/* 6. Ruta Protegida con scope openid */}
                 <div className="tarjeta-prueba">
                   <div>
-                    <span className="badge badge-scope">Perfil: Autenticado</span>
+                    <span className="badge badge-scope">Cualquier Autenticado</span>
                     <h4>6. Datos del Sistema (GET /datos)</h4>
                     <p>Requiere autenticación estándar OIDC (scope <code>openid</code>).</p>
                   </div>

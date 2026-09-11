@@ -49,7 +49,34 @@ resource "aws_cognito_resource_server" "pedidos" {
 
   scope {
     scope_name        = "write"
-    scope_description = "Crear y modificar pedidos"
+    scope_description = "Crear pedidos"
+  }
+
+  scope {
+    scope_name        = "approve"
+    scope_description = "Aprobar o completar pedidos"
+  }
+}
+
+# Resource Server complementario para compatibilidad con rúbrica de solicitudes
+resource "aws_cognito_resource_server" "solicitudes" {
+  identifier   = "solicitudes"
+  name         = "API de Gestion de Solicitudes"
+  user_pool_id = aws_cognito_user_pool.pool.id
+
+  scope {
+    scope_name        = "read"
+    scope_description = "Consultar solicitudes"
+  }
+
+  scope {
+    scope_name        = "write"
+    scope_description = "Crear solicitudes"
+  }
+
+  scope {
+    scope_name        = "approve"
+    scope_description = "Aprobar solicitudes"
   }
 }
 
@@ -57,25 +84,25 @@ resource "aws_cognito_resource_server" "pedidos" {
 resource "aws_cognito_user_group" "lectores" {
   name         = "lectores"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Usuarios con solo permisos de lectura (pedidos/read)"
+  description  = "Usuarios con solo permisos de lectura (solicitudes/read, pedidos/read)"
 }
 
 resource "aws_cognito_user_group" "clientes" {
   name         = "clientes"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Clientes con solo permisos de lectura (pedidos/read)"
+  description  = "Clientes con permisos de lectura y creación (solicitudes/read, solicitudes/write)"
 }
 
 resource "aws_cognito_user_group" "editores" {
   name         = "editores"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Usuarios con permisos de lectura y escritura (pedidos/read, pedidos/write)"
+  description  = "Editores con permisos de lectura y aprobación (solicitudes/read, solicitudes/approve)"
 }
 
 resource "aws_cognito_user_group" "administradores" {
   name         = "administradores"
   user_pool_id = aws_cognito_user_pool.pool.id
-  description  = "Administradores con permisos de lectura y escritura (pedidos/read, pedidos/write)"
+  description  = "Administradores con control total de negocio"
 }
 
 # Cliente público para la Single Page Application (SPA)
@@ -89,7 +116,7 @@ resource "aws_cognito_user_pool_client" "spa" {
   supported_identity_providers         = ["COGNITO"]
 
   # REGLA DE SEGURIDAD OBLIGATORIA (Perímetro RA1):
-  # Los scopes de negocio (pedidos/*) NO se declaran aquí;
+  # Los scopes de negocio no se declaran aquí;
   # son inyectados exclusivamente por el Lambda Pre-Token V2 según el grupo del usuario.
   allowed_oauth_scopes = [
     "openid",
@@ -122,11 +149,12 @@ resource "aws_cognito_user_pool_client" "spa" {
   }
 
   depends_on = [
-    aws_cognito_resource_server.pedidos
+    aws_cognito_resource_server.pedidos,
+    aws_cognito_resource_server.solicitudes
   ]
 }
 
-# 1. Usuario Demo con Rol Lector (Solo lectura: pedidos/read)
+# 1. Usuario Demo: Lector (Grupo lectores -> Scopes: solicitudes/read)
 resource "aws_cognito_user" "lector_demo" {
   user_pool_id = aws_cognito_user_pool.pool.id
   username     = "lector@pedidos360.com"
@@ -147,7 +175,49 @@ resource "aws_cognito_user_in_group" "lector_grupo" {
   username     = aws_cognito_user.lector_demo.username
 }
 
-# 2. Usuario Demo con Rol Administrador (Lectura y Escritura: pedidos/read, pedidos/write)
+# 2. Usuario Demo: Cliente (Grupo clientes -> Scopes: solicitudes/read, solicitudes/write)
+resource "aws_cognito_user" "cliente_demo" {
+  user_pool_id = aws_cognito_user_pool.pool.id
+  username     = "cliente@pedidos360.com"
+  password     = "Pedidos360!"
+
+  attributes = {
+    email          = "cliente@pedidos360.com"
+    email_verified = true
+    name           = "Usuario Cliente Demo"
+  }
+
+  message_action = "SUPPRESS"
+}
+
+resource "aws_cognito_user_in_group" "cliente_grupo" {
+  user_pool_id = aws_cognito_user_pool.pool.id
+  group_name   = aws_cognito_user_group.clientes.name
+  username     = aws_cognito_user.cliente_demo.username
+}
+
+# 3. Usuario Demo: Editor (Grupo editores -> Scopes: solicitudes/read, solicitudes/approve)
+resource "aws_cognito_user" "editor_demo" {
+  user_pool_id = aws_cognito_user_pool.pool.id
+  username     = "editor@pedidos360.com"
+  password     = "Pedidos360!"
+
+  attributes = {
+    email          = "editor@pedidos360.com"
+    email_verified = true
+    name           = "Usuario Editor Demo"
+  }
+
+  message_action = "SUPPRESS"
+}
+
+resource "aws_cognito_user_in_group" "editor_grupo" {
+  user_pool_id = aws_cognito_user_pool.pool.id
+  group_name   = aws_cognito_user_group.editores.name
+  username     = aws_cognito_user.editor_demo.username
+}
+
+# 4. Usuario Demo: Administrador (Grupo administradores -> Control total)
 resource "aws_cognito_user" "admin_demo" {
   user_pool_id = aws_cognito_user_pool.pool.id
   username     = "admin@pedidos360.com"

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handler } from '../index.mjs';
 
-test('Usuario del grupo lectores recibe pedidos/read', async () => {
+test('Usuario del grupo lectores recibe solicitudes/read y pedidos/read', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
@@ -17,10 +17,10 @@ test('Usuario del grupo lectores recibe pedidos/read', async () => {
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['pedidos/read']);
+  assert.deepEqual(scopes, ['solicitudes/read', 'pedidos/read']);
 });
 
-test('Usuario del grupo clientes recibe pedidos/read', async () => {
+test('Usuario del grupo clientes recibe solicitudes/read, pedidos/read, solicitudes/write y pedidos/write', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
@@ -35,10 +35,10 @@ test('Usuario del grupo clientes recibe pedidos/read', async () => {
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['pedidos/read']);
+  assert.deepEqual(scopes, ['solicitudes/read', 'pedidos/read', 'solicitudes/write', 'pedidos/write']);
 });
 
-test('Usuario del grupo editores recibe pedidos/read y pedidos/write', async () => {
+test('Usuario del grupo editores recibe solicitudes/read, pedidos/read, solicitudes/approve y pedidos/approve', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
@@ -53,10 +53,10 @@ test('Usuario del grupo editores recibe pedidos/read y pedidos/write', async () 
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['pedidos/read', 'pedidos/write']);
+  assert.deepEqual(scopes, ['solicitudes/read', 'pedidos/read', 'solicitudes/approve', 'pedidos/approve']);
 });
 
-test('Usuario del grupo administradores recibe pedidos/read y pedidos/write', async () => {
+test('Usuario del grupo administradores recibe todos los scopes de negocio', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
@@ -71,10 +71,17 @@ test('Usuario del grupo administradores recibe pedidos/read y pedidos/write', as
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['pedidos/read', 'pedidos/write']);
+  assert.deepEqual(scopes, [
+    'solicitudes/read',
+    'pedidos/read',
+    'solicitudes/write',
+    'pedidos/write',
+    'solicitudes/approve',
+    'pedidos/approve'
+  ]);
 });
 
-test('Usuario en lectores y administradores recibe pedidos/read y pedidos/write sin duplicados', async () => {
+test('Usuario en lectores y administradores recibe scopes completos sin duplicados', async () => {
   const event = {
     version: '2',
     triggerSource: 'TokenGeneration_HostedAuth',
@@ -89,7 +96,14 @@ test('Usuario en lectores y administradores recibe pedidos/read y pedidos/write 
   const res = await handler(event);
   const scopes = res.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd;
 
-  assert.deepEqual(scopes, ['pedidos/read', 'pedidos/write']);
+  assert.deepEqual(scopes, [
+    'solicitudes/read',
+    'pedidos/read',
+    'solicitudes/write',
+    'pedidos/write',
+    'solicitudes/approve',
+    'pedidos/approve'
+  ]);
 });
 
 test('Usuario sin grupo no recibe scopes de negocio', async () => {

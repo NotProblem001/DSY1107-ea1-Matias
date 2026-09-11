@@ -104,7 +104,7 @@ resource "aws_apigatewayv2_route" "get_datos" {
   authorization_scopes = ["openid"]
 }
 
-# 3. Rutas de Lectura de Pedidos (requiere scope pedidos/read)
+# 3. Rutas de Lectura de Pedidos (requiere scope pedidos/read o solicitudes/read)
 # Acceso permitido para: lectores, clientes, editores y administradores
 resource "aws_apigatewayv2_route" "get_pedidos" {
   api_id               = aws_apigatewayv2_api.api_manager.id
@@ -112,7 +112,7 @@ resource "aws_apigatewayv2_route" "get_pedidos" {
   target               = "integrations/${aws_apigatewayv2_integration.backend_pedidos_col.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["pedidos/read"]
+  authorization_scopes = ["pedidos/read", "solicitudes/read"]
 }
 
 resource "aws_apigatewayv2_route" "get_pedidos_id" {
@@ -121,27 +121,29 @@ resource "aws_apigatewayv2_route" "get_pedidos_id" {
   target               = "integrations/${aws_apigatewayv2_integration.backend_pedidos_ele.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["pedidos/read"]
+  authorization_scopes = ["pedidos/read", "solicitudes/read"]
 }
 
-# 4. Rutas de Escritura de Pedidos (requiere scope pedidos/write)
-# Acceso exclusivo para: editores y administradores (lectores/clientes reciben 403 Forbidden)
+# 4. Rutas de Creación de Pedidos (requiere scope pedidos/write o solicitudes/write)
+# Acceso exclusivo para: clientes y administradores (lectores y editores reciben 403 Forbidden)
 resource "aws_apigatewayv2_route" "post_pedidos" {
   api_id               = aws_apigatewayv2_api.api_manager.id
   route_key            = "POST /pedidos"
   target               = "integrations/${aws_apigatewayv2_integration.backend_pedidos_col.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["pedidos/write"]
+  authorization_scopes = ["pedidos/write", "solicitudes/write"]
 }
 
+# 5. Rutas de Modificación y Aprobación (requiere scope approve o write)
+# Acceso para: editores (approve) y administradores
 resource "aws_apigatewayv2_route" "put_pedidos" {
   api_id               = aws_apigatewayv2_api.api_manager.id
   route_key            = "PUT /pedidos/{proxy+}"
   target               = "integrations/${aws_apigatewayv2_integration.backend_pedidos_ele.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["pedidos/write"]
+  authorization_scopes = ["pedidos/approve", "solicitudes/approve", "pedidos/write", "solicitudes/write"]
 }
 
 resource "aws_apigatewayv2_route" "delete_pedidos" {
@@ -150,7 +152,7 @@ resource "aws_apigatewayv2_route" "delete_pedidos" {
   target               = "integrations/${aws_apigatewayv2_integration.backend_pedidos_ele.id}"
   authorization_type   = "JWT"
   authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["pedidos/write"]
+  authorization_scopes = ["pedidos/write", "solicitudes/write", "pedidos/approve", "solicitudes/approve"]
 }
 
 # Stages

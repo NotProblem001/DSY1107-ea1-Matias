@@ -215,13 +215,11 @@ npm run dev
 ```
 Abre en el navegador: `http://localhost:5173`
 
-> **Cuentas Demo Precargadas en Cognito:**
-> - **Lector / Cliente (Solo lectura `pedidos/read`):**
->   - Correo: `lector@pedidos360.com`
->   - Contraseña: `Pedidos360!`
-> - **Editor / Administrador (Lectura y escritura `pedidos/read`, `pedidos/write`):**
->   - Correo: `admin@pedidos360.com`
->   - Contraseña: `Pedidos360!`
+> **Cuentas Demo Precargadas para Evaluación (Contraseña: `Pedidos360!`):**
+> - **Lector:** `lector@pedidos360.com` (Grupo: `lectores` &rarr; Scopes: `solicitudes/read`)
+> - **Cliente:** `cliente@pedidos360.com` (Grupo: `clientes` &rarr; Scopes: `solicitudes/read`, `solicitudes/write`)
+> - **Editor:** `editor@pedidos360.com` (Grupo: `editores` &rarr; Scopes: `solicitudes/read`, `solicitudes/approve`)
+> - *(Opcional Administrador:* `admin@pedidos360.com` *para control total).*
 
 ---
 
