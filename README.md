@@ -30,8 +30,8 @@ Repositorio oficial para la **EA1** de la asignatura **Desarrollo Cloud Native I
        ┌───────────────────────────────┐
        │    user-token-ms (Lambda)     │
        │ Inyecta scopes dinámicamente: │
-       │  - lectores -> pedidos/read   │
-       │  - admin -> read + write      │
+       │  - lectores -> solo lectura   │
+       │  - admin -> control total     │
        └──────────────┬────────────────┘
                       │
        3. Retorna Access Token con claim 'scope'
@@ -66,8 +66,10 @@ Repositorio oficial para la **EA1** de la asignatura **Desarrollo Cloud Native I
      * `pedidos/read`: Consultar pedidos.
      * `pedidos/write`: Crear y modificar pedidos.
    - **Grupos de Usuarios:**
-     * `lectores` / `clientes`: Acceso de solo lectura (`pedidos/read`).
-     * `editores` / `administradores`: Acceso total de lectura y escritura (`pedidos/read`, `pedidos/write`).
+     * `lectores`: Acceso de solo lectura (`solicitudes/read`, `pedidos/read`).
+     * `clientes`: Acceso de lectura y creación (`solicitudes/write`, `pedidos/write`).
+     * `editores`: Acceso de lectura y aprobación (`solicitudes/approve`, `pedidos/approve`).
+     * `administradores`: Control total de negocio (`solicitudes` y `pedidos` con `read`, `write`, `approve`).
    - **Microservicio Lambda Pre-Token Generation V2 (`user-token-ms`):**
      * Inyecta dinámicamente los scopes en `claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd`.
    - **Regla de Seguridad RA1:** Los scopes de negocio `pedidos/*` **NO** están configurados en el cliente de la SPA en Cognito para evitar que el frontend se auto-conceda scopes sin pasar por el trigger.

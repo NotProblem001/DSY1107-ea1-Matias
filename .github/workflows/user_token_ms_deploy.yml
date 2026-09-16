@@ -128,8 +128,17 @@ jobs:
           scopes=$(jq -c '.response.claimsAndScopeOverrideDetails.accessTokenGeneration.scopesToAdd' salida.json)
           echo "Scopes devueltos para un administrador: $scopes"
 
-          if [ "$scopes" != '["pedidos/read","pedidos/write"]' ]; then
+          ESPERADOS='["solicitudes/read","pedidos/read","solicitudes/write","pedidos/write","solicitudes/approve","pedidos/approve"]'
+
+          # Comprobación de coincidencia con los scopes esperados para el rol administrador
+          COINCIDE=$(jq -n \
+            --argjson devueltos "$scopes" \
+            --argjson esperados "$ESPERADOS" \
+            '($devueltos | sort) == ($esperados | sort)' 2>/dev/null || true)
+
+          if [ "$COINCIDE" != "true" ] && [ "$scopes" != "$ESPERADOS" ]; then
             echo "::error::El Lambda desplegado no concede los scopes esperados: $scopes"
+            echo "Se esperaba: $ESPERADOS"
             jq . salida.json
             exit 1
           fi

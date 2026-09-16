@@ -98,8 +98,10 @@ Los pipelines de CI/CD de GitHub Actions y la automatización de Terraform depen
   - Scope `read`: *"Consultar pedidos"*.
   - Scope `write`: *"Crear y modificar pedidos"*.
 - [x] **Grupos de Usuarios:**
-  - `lectores` / `clientes`: Rol de solo lectura (`pedidos/read`).
-  - `editores` / `administradores`: Rol de lectura y escritura (`pedidos/read`, `pedidos/write`).
+  - `lectores`: Rol de solo lectura (`solicitudes/read`, `pedidos/read`).
+  - `clientes`: Rol de lectura y creación (`solicitudes/read`, `pedidos/read`, `solicitudes/write`, `pedidos/write`).
+  - `editores`: Rol de lectura y aprobación (`solicitudes/read`, `pedidos/read`, `solicitudes/approve`, `pedidos/approve`).
+  - `administradores`: Control total de negocio (`solicitudes` y `pedidos` con `read`, `write`, `approve`).
 - [x] **Cliente SPA Público:**
   - `generate_secret = false`.
   - `allowed_oauth_flows = ["code"]` (Authorization Code Flow con PKCE).
