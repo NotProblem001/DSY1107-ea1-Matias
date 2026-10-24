@@ -55,6 +55,10 @@ jobs:
         working-directory: messaging
         run: sleep 10 && bash scripts/prueba-e2e.sh
 
+      - name: Resiliencia y carga (fanout, requeue, TTL, reinicio de nodos, 1000 eventos)
+        working-directory: messaging
+        run: N_CARGA=1000 PARALELO=50 bash scripts/prueba-resiliencia-carga.sh
+
       - name: Logs si falla
         if: failure()
         working-directory: messaging

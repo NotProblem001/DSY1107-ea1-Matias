@@ -15,9 +15,11 @@ spring:
     listener:
       simple:
         acknowledge-mode: manual   # cada consumidor decide ACK / NACK / REJECT
-        prefetch: 1                # fair dispatch
-        concurrency: 1
-        max-concurrency: 3
+        # prefetch 1 (fair dispatch) limitaba a ~30 entregas/s con colas quorum (un round-trip Raft por mensaje);
+        # con 25 la prueba de carga de 2000 eventos se drena sin llegar a x-max-length
+        prefetch: 25
+        concurrency: 3
+        max-concurrency: 5
         default-requeue-rejected: false
 
 server:
