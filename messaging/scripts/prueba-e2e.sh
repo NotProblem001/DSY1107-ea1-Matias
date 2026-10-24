@@ -17,7 +17,8 @@ evento() { # $1=pedidoId $2=tipo $3=simularFallo
   curl -s -o /dev/null -w "%{http_code}" -X POST "$EVENTOS/api/eventos/pedidos" -H 'Content-Type: application/json' \
     -d "{\"pedidoId\":$1,\"clienteEmail\":\"cliente@pedidos360.com\",\"descripcion\":\"Switch Cisco\",\"monto\":1250000,\"tipo\":\"$2\",\"simularFallo\":\"$3\"}"
 }
-logs() { docker logs pedidos-mensajeria-ms 2>&1; }
+INICIO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+logs() { docker logs --since "$INICIO" pedidos-mensajeria-ms 2>&1; }  # solo esta corrida
 
 echo "1. Cluster"
 nodos=$(docker exec rabbitmq-1 rabbitmqctl cluster_status --formatter json | grep -o 'rabbit@rabbitmq-[0-9]' | sort -u | wc -l)

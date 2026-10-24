@@ -1,0 +1,66 @@
+name: Messaging CI
+
+on:
+  push:
+    paths:
+      - 'messaging/**'
+      - '.github/workflows/messaging_ci.yml'
+  pull_request:
+    paths:
+      - 'messaging/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Build & Test (${{ matrix.servicio }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        servicio: [pedidos-mensajeria-ms, rabbit-admin-ms]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Compilar y ejecutar pruebas Maven
+        working-directory: messaging/${{ matrix.servicio }}
+        run: chmod +x mvnw && ./mvnw --batch-mode clean verify
+
+  e2e:
+    name: E2E cluster RabbitMQ
+    needs: pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Levantar cluster (3 nodos) y microservicios
+        working-directory: messaging
+        run: docker compose --profile apps up -d --build --wait
+
+      - name: Prueba end-to-end (ACK, reintentos, DLQ, administrador)
+        working-directory: messaging
+        run: sleep 10 && bash scripts/prueba-e2e.sh
+
+      - name: Logs si falla
+        if: failure()
+        working-directory: messaging
+        run: docker compose --profile apps logs --tail 200
+
+      - name: Bajar el stack
+        if: always()
+        working-directory: messaging
+        run: docker compose --profile apps down -v

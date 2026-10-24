@@ -3,6 +3,8 @@
 
 Repositorio oficial para la **EA1** de la asignatura **Desarrollo Cloud Native I (DSY1107)**. Implementa una arquitectura perimetral desacoplada de extremo a extremo que gestiona, autentica, filtra y securitiza el consumo de APIs a través de estándares abiertos (**OAuth 2.0**, **OpenID Connect**, **PKCE**, **Cognito Scopes**, **JWT Authorizer** y **Spring Boot 3.3.4 con Java 21**).
 
+> **EP3 / EP4 · Mensajería asíncrona con RabbitMQ:** clúster de 3 nodos, productores y consumidores con ACK manual y DLQ, microservicio administrador y despliegue en AWS. Ver [`docs/EP3_RABBITMQ.md`](docs/EP3_RABBITMQ.md) (código en `messaging/` y `terraform-rabbitmq/`).
+
 ---
 
 ## 1. Arquitectura de la Solución (Seguridad Perimetral RA1)

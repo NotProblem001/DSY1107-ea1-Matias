@@ -43,3 +43,4 @@ terraform-rabbitmq/.terraform/
 terraform-rabbitmq/.build/
 terraform-rabbitmq/terraform.tfstate*
 terraform-rabbitmq/.terraform.lock.hcl
+terraform-rabbitmq/tfplan

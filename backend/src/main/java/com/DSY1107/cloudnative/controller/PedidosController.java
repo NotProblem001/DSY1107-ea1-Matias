@@ -1,5 +1,7 @@
 package com.DSY1107.cloudnative.controller;
 
+import com.DSY1107.cloudnative.messaging.PedidoEventPublisher;
+import com.DSY1107.cloudnative.messaging.PedidoEventPublisher.TipoEvento;
 import com.DSY1107.cloudnative.model.Pedido;
 import com.DSY1107.cloudnative.repository.PedidoRepository;
 import org.springframework.http.HttpStatus;
@@ -15,9 +17,11 @@ import java.util.Optional;
 public class PedidosController {
 
     private final PedidoRepository pedidoRepository;
+    private final PedidoEventPublisher eventPublisher;
 
-    public PedidosController(PedidoRepository pedidoRepository) {
+    public PedidosController(PedidoRepository pedidoRepository, PedidoEventPublisher eventPublisher) {
         this.pedidoRepository = pedidoRepository;
+        this.eventPublisher = eventPublisher;
         // Precarga inicial si la base de datos está vacía
         if (this.pedidoRepository.count() == 0) {
             this.pedidoRepository.save(new Pedido(null, "cliente@pedidos360.com", "Servidor Dell PowerEdge R750", 3599990.0, "COMPLETADO", LocalDateTime.now().minusDays(3)));
@@ -47,6 +51,7 @@ public class PedidosController {
             nuevoPedido.setEstado("PENDIENTE");
         }
         Pedido guardado = pedidoRepository.save(nuevoPedido);
+        eventPublisher.publicar(guardado, TipoEvento.CREADO);
         return ResponseEntity.status(HttpStatus.CREATED).body(guardado);
     }
 
@@ -72,6 +77,7 @@ public class PedidosController {
         }
 
         Pedido actualizado = pedidoRepository.save(pedidoExistente);
+        eventPublisher.publicar(actualizado, TipoEvento.ACTUALIZADO);
         return ResponseEntity.ok(actualizado);
     }
 
