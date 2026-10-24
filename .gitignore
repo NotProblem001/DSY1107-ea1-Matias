@@ -13,6 +13,9 @@ credenciales-lab.env
 !*.env.example
 
 # Artefactos temporales de despliegue
+PROMPT_AUTONOMO.md
+PROMPT_RABBITMQ_AUDIT.md
+CloudNative
 front.zip
 user-token-ms.zip
 task-definition.json
