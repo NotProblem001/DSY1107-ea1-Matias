@@ -6,6 +6,10 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend_compile.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,3 +40,7 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
+
+      - name: Pruebas de permisos por rol
+        working-directory: frontend
+        run: npm test
