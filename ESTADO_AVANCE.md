@@ -83,3 +83,9 @@ Fuente: `CloudNative/EP3_DSY1107_Estudiante_encargo.pdf`, `EP4_..._presentación
   - El backend ahora declara sus exchanges (`TopicExchange` y `DirectExchange`) en `RabbitConfig`, lo que cierra la brecha del indicador 2 ("para todos los microservicios").
   - Bug en `prueba-e2e.sh`: contaba los logs de corridas anteriores. Ahora usa `--since` de la corrida. Resultado 33/33.
   - La alerta CRITICAL de `notificaciones.dlq` apareció durante el rebuild y se resolvió sola.
+- **Auditoría (PROMPT_RABBITMQ_AUDIT.md):**
+  - Prefetch 1 → 25: de 30 a 1138 entregas/s. La carga de 2000 eventos ya no desborda `x-max-length`.
+  - Batería nueva `prueba-resiliencia-carga.sh` (fanout, requeue, TTL, reinicio, carga), integrada en el CI.
+  - `backend_compile` ahora valida PR.
+  - Los deploys fallan por credenciales vencidas de AWS Academy en los secrets (acción del usuario).
+  - Detalle en `PLAN_EJECUCION_RABBITMQ.md` y `PRUEBAS_RABBITMQ_EVIDENCIA.md`.
