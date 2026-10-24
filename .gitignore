@@ -37,3 +37,9 @@ backend/target/
 
 .DS_Store
 Thumbs.db
+
+# Terraform del cluster RabbitMQ (EP4)
+terraform-rabbitmq/.terraform/
+terraform-rabbitmq/.build/
+terraform-rabbitmq/terraform.tfstate*
+terraform-rabbitmq/.terraform.lock.hcl

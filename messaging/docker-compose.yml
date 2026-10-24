@@ -57,6 +57,7 @@ services:
   pedidos-mensajeria-ms:
     <<: *ms
     build: ./pedidos-mensajeria-ms
+    image: ${IMAGEN_EVENTOS:-pedidos360/pedidos-mensajeria-ms:local}
     container_name: pedidos-mensajeria-ms
     ports: ["8091:8091"]
     profiles: [apps]
@@ -64,6 +65,7 @@ services:
   rabbit-admin-ms:
     <<: *ms
     build: ./rabbit-admin-ms
+    image: ${IMAGEN_ADMIN:-pedidos360/rabbit-admin-ms:local}
     container_name: rabbit-admin-ms
     ports: ["8097:8097"]
     profiles: [apps]

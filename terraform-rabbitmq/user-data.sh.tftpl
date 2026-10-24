@@ -1,0 +1,39 @@
+#!/bin/bash
+# Instala Docker + Compose, escribe el docker-compose.yml del repo y levanta cluster + microservicios desde ECR.
+set -euxo pipefail
+exec > >(tee /var/log/pedidos360-setup.log) 2>&1
+
+dnf install -y docker
+systemctl enable --now docker
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+mkdir -p /opt/pedidos360/messaging/rabbitmq
+cd /opt/pedidos360/messaging
+
+cat > docker-compose.yml <<'PEDIDOS360_EOF'
+${compose}
+PEDIDOS360_EOF
+
+cat > rabbitmq/rabbitmq.conf <<'PEDIDOS360_EOF'
+${rabbitmq_conf}
+PEDIDOS360_EOF
+
+cat > .env <<'PEDIDOS360_EOF'
+RABBITMQ_USER=admin
+RABBITMQ_PASS=${rabbitmq_pass}
+RABBITMQ_ERLANG_COOKIE=${erlang_cookie}
+IMAGEN_EVENTOS=${imagen_evento}
+IMAGEN_ADMIN=${imagen_admin}
+PEDIDOS360_EOF
+chmod 600 .env
+
+# LabInstanceProfile (LabRole) permite leer ECR
+aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${registro}
+docker compose --profile apps pull
+docker compose --profile apps up -d --no-build --wait
+docker exec rabbitmq-1 rabbitmqctl cluster_status
+echo "PEDIDOS360_LISTO"

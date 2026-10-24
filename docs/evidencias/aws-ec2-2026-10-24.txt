@@ -1,0 +1,37 @@
+# Evidencia despliegue AWS (EC2 i-075047646bafec5eb, us-east-1) - 2026-10-24T01:46:41-03:00
+## Nodos del cluster (Management API /api/nodes)
+  rabbit@rabbitmq-1 running= True
+  rabbit@rabbitmq-2 running= True
+  rabbit@rabbitmq-3 running= True
+## Colas (tipo, miembros, argumentos)
+  documentos.dlq quorum miembros= 3 {'x-message-ttl': 86400000}
+  documentos.queue quorum miembros= 3 {'x-dead-letter-exchange': 'pedidos.dlx', 'x-dead-letter-routing-key': 'documentos.dead', 'x-delivery-limit': 5, 'x-max-length': 1000, 'x-message-ttl': 60000}
+  notificaciones.dlq quorum miembros= 3 {'x-message-ttl': 86400000}
+  notificaciones.queue quorum miembros= 3 {'x-dead-letter-exchange': 'pedidos.dlx', 'x-dead-letter-routing-key': 'notificaciones.dead', 'x-delivery-limit': 5, 'x-max-length': 1000, 'x-message-ttl': 60000}
+  tickets.dlq quorum miembros= 3 {'x-message-ttl': 86400000}
+  tickets.queue quorum miembros= 3 {'x-dead-letter-exchange': 'pedidos.dlx', 'x-dead-letter-routing-key': 'tickets.dead', 'x-delivery-limit': 5, 'x-max-length': 1000, 'x-message-ttl': 60000}
+## Exchanges de Pedidos360
+  pedidos.dlx direct
+  pedidos.documentos direct
+  pedidos.eventos topic
+## Publicacion de eventos
+  POST /api/eventos/pedidos pedido=301 tipo=CREADO fallo=NINGUNO -> {"pedidoId":301,"routingKeys":["pedido.creado","documento.factura"]} HTTP 202
+  POST /api/eventos/pedidos pedido=302 tipo=ACTUALIZADO fallo=TRANSITORIO -> {"pedidoId":302,"routingKeys":["pedido.actualizado"]} HTTP 202
+  POST /api/eventos/pedidos pedido=303 tipo=CANCELADO fallo=PERMANENTE -> {"pedidoId":303,"routingKeys":["pedido.cancelado"]} HTTP 202
+## Administrador
+  POST /queues -> {"nombre":"cloud.demo","mensajes":0,"consumidores":0} HTTP 201
+  POST /queues nombre vacio -> {"status":400,"error":"Parametros invalidos","detalles":{"nombre":"solo letras, numeros, '.', '_' o '-' (1-200), sin prefijo reservado 'amq.'"}} HTTP 400
+  DELETE /queues/cloud.demo -> HTTP 204
+## docker compose ps + logs de consumidores (via SSM)
+NAME                    STATUS
+pedidos-mensajeria-ms   Up About a minute
+rabbit-admin-ms         Up About a minute
+rabbitmq-1              Up About a minute (healthy)
+rabbitmq-2              Up About a minute (healthy)
+rabbitmq-3              Up About a minute (healthy)
+umer.ConfirmacionManual        : [DOCUMENTOS] ACK pedido=301
+umer.ConfirmacionManual        : [NOTIFICACIONES] ACK pedido=301
+umer.ConfirmacionManual        : [TICKETS] ACK pedido=301
+eria.consumer.dlq.DlqConsumer  : [DLQ] cola=notificaciones.dlq origen=notificaciones.queue motivo=rejected veces=1 cuerpo={"pedidoId":302,"clienteEmail":"cliente@pedidos36
+eria.consumer.dlq.DlqConsumer  : [DLQ] cola=notificaciones.dlq origen=notificaciones.queue motivo=rejected veces=1 cuerpo={"pedidoId":303,"clienteEmail":"cliente@pedidos36
+- terraform destroy ejecutado 2026-10-24T01:48:17-03:00: 0 recursos en el estado.
