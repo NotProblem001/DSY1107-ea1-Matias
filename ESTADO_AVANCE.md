@@ -94,4 +94,4 @@ Fuente: `CloudNative/EP3_DSY1107_Estudiante_encargo.pdf`, `EP4_..._presentación
   - Los errores del log son todos esperados: el reinicio intencional de los nodos (14:18:00) y los fallos simulados de los pedidos 102/103 de la E2E.
   - Rama sincronizada con `origin` (`54f438d`) y sin cambios pendientes.
   - Brecha abierta: frontend Angular.
-- **Revisión siguiente:** sin cambios. 5/5 contenedores arriba, logs limpios.
+- **Revisiones siguientes (x7):** sin cambios. 5/5 contenedores arriba, logs limpios.

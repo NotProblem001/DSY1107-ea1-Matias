@@ -1,0 +1,54 @@
+Evidencias RabbitMQ Pedidos360 (docker compose local, permitido por la docente) - 2026-10-24T19:08:01Z
+
+================ docker compose ps ================
+NAME                    IMAGE                                    STATUS
+pedidos-mensajeria-ms   pedidos360/pedidos-mensajeria-ms:local   Up 5 hours
+rabbit-admin-ms         pedidos360/rabbit-admin-ms:local         Up 2 minutes
+rabbitmq-1              rabbitmq:4-management                    Up 5 hours (healthy)
+rabbitmq-2              rabbitmq:4-management                    Up 5 hours (healthy)
+rabbitmq-3              rabbitmq:4-management                    Up 5 hours (healthy)
+
+================ Cluster ================
+Disk Nodes
+
+rabbit@rabbitmq-1
+rabbit@rabbitmq-2
+rabbit@rabbitmq-3
+
+Running Nodes
+
+rabbit@rabbitmq-1
+rabbit@rabbitmq-2
+rabbit@rabbitmq-3
+
+rabbit@rabbitmq-1: RabbitMQ 4.4.0 on Erlang 29.1.2
+rabbit@rabbitmq-2: RabbitMQ 4.4.0 on Erlang 29.1.2
+rabbit@rabbitmq-3: RabbitMQ 4.4.0 on Erlang 29.1.2
+
+================ Colas (quorum) y argumentos DLX/TTL/max-length ================
+documentos.dlq	quorum	true	0	3	[{"x-message-ttl",86400000},{"x-queue-type","quorum"}]
+documentos.queue	quorum	true	0	3	[{"x-dead-letter-exchange","pedidos.dlx"},{"x-message-ttl",60000},{"x-max-length",1000},{"x-delivery-limit",5},{"x-dead-letter-routing-key","documentos.dead"},{"x-queue-type","quorum"}]
+name	type	durable	messages	consumers	arguments
+notificaciones.dlq	quorum	true	0	3	[{"x-message-ttl",86400000},{"x-queue-type","quorum"}]
+notificaciones.queue	quorum	true	0	3	[{"x-dead-letter-exchange","pedidos.dlx"},{"x-message-ttl",60000},{"x-max-length",1000},{"x-delivery-limit",5},{"x-dead-letter-routing-key","notificaciones.dead"},{"x-queue-type","quorum"}]
+tickets.dlq	quorum	true	0	3	[{"x-message-ttl",86400000},{"x-queue-type","quorum"}]
+tickets.queue	quorum	true	0	3	[{"x-dead-letter-exchange","pedidos.dlx"},{"x-message-ttl",60000},{"x-max-length",1000},{"x-delivery-limit",5},{"x-dead-letter-routing-key","tickets.dead"},{"x-queue-type","quorum"}]
+
+================ Exchanges de la aplicacion ================
+name	type	durable
+pedidos.dlx	direct	true
+pedidos.documentos	direct	true
+pedidos.eventos	topic	true
+
+================ Bindings ================
+source_name	destination_name	routing_key
+pedidos.dlx	documentos.dlq	documentos.dead
+pedidos.documentos	documentos.queue	documento.factura
+pedidos.eventos	tickets.queue	pedido.creado
+pedidos.eventos	notificaciones.queue	pedido.#
+pedidos.dlx	tickets.dlq	tickets.dead
+pedidos.dlx	notificaciones.dlq	notificaciones.dead
+
+================ Logs de mensajes no entregados (DlqConsumer) ================
+  2026-10-24T19:08:10.131Z ERROR 7 --- [pedidos-mensajeria-ms] [ dlq-listener-9] c.D.mensajeria.consumer.dlq.DlqConsumer  : [DLQ] cola=notificaciones.dlq origen=notificaciones.queue motivo=rejected veces=1 cuerpo={"pedidoId":102,"clienteEmail":"cliente@pedidos360.com","descripcion":"Switch Cisco","monto":1250000.0,"tipo":"ACTUALIZADO","simularFallo":"TRANSITORIO"}
+  2026-10-24T19:08:15.755Z ERROR 7 --- [pedidos-mensajeria-ms] [ dlq-listener-7] c.D.mensajeria.consumer.dlq.DlqConsumer  : [DLQ] cola=notificaciones.dlq origen=notificaciones.queue motivo=rejected veces=1 cuerpo={"pedidoId":103,"clienteEmail":"cliente@pedidos360.com","descripcion":"Switch Cisco","monto":1250000.0,"tipo":"CANCELADO","simularFallo":"PERMANENTE"}

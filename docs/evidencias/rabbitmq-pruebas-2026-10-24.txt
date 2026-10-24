@@ -1,0 +1,81 @@
+1. Cluster
+  [OK]  3 nodos en el cluster
+2. Topologia (3 colas + 3 DLQ quorum, exchanges topic y direct)
+  [OK]  notificaciones.queue quorum
+  [OK]  notificaciones.dlq quorum
+  [OK]  tickets.queue quorum
+  [OK]  tickets.dlq quorum
+  [OK]  documentos.queue quorum
+  [OK]  documentos.dlq quorum
+  [OK]  exchange pedidos.eventos:topic
+  [OK]  exchange pedidos.documentos:direct
+  [OK]  exchange pedidos.dlx:direct
+3. Camino feliz: ACK
+  [OK]  evento aceptado (202)
+  [OK]  tickets ACK
+  [OK]  documentos ACK
+  [OK]  notificaciones ACK
+4. Error transitorio: 3 reintentos y luego NACK -> DLQ
+  [OK]  3 reintentos
+  [OK]  NACK sin requeue
+  [OK]  pedido 102 auditado en la DLQ
+5. Error permanente: REJECT directo a DLQ
+  [OK]  REJECT sin requeue
+  [OK]  pedido 103 auditado en la DLQ
+6. Validacion del productor
+  [OK]  evento invalido -> 400
+7. Administrador RabbitMQ
+  [OK]  POST /exchanges (headers) 201
+  [OK]  POST /queues 201
+  [OK]  cola duplicada 409
+  [OK]  nombre vacio 400
+  [OK]  POST /bindings 201
+  [OK]  binding a exchange inexistente 404
+  [OK]  DELETE /bindings 204
+  [OK]  GET /queues/demo.queue 200
+  [OK]  DELETE /queues 204
+  [OK]  DELETE cola inexistente 404
+  [OK]  DELETE /exchanges 204
+
+RESULTADO: todo OK
+1. Routing exclusivo por routing key (topic)
+  [OK]  pedido.actualizado llega a notificaciones (pedido.#)
+  [OK]  tickets NO recibe pedido.actualizado (solo pedido.creado)
+  [OK]  documentos NO recibe eventos del topic (solo direct)
+2. Fanout: copia a todas las colas enlazadas, ignora la routing key
+  [OK]  exchange fanout creado (201)
+  [OK]  test.fan.a (enlazada) recibe (1)
+  [OK]  test.fan.b (enlazada) recibe (1)
+  [OK]  test.fan.c (sin binding) no recibe (0)
+3. Rechazo con requeue=true y requeue=false
+  [OK]  reject requeue=true: vuelve a la cola (1)
+  [OK]  reject requeue=true: no va a la DLQ (0)
+  [OK]  reject requeue=false: sale de la cola (0)
+  [OK]  reject requeue=false: llega a la DLQ (1)
+4. Expiracion por TTL -> DLQ
+  [OK]  test.ttl vacia tras 1.5 s de TTL (0)
+  [OK]  DLQ acumula rechazado + expirado (2)
+  [OK]  x-death.reason en la DLQ (expired,rejected)
+5. Durabilidad: reinicio de los 3 nodos
+  [OK]  50 mensajes persistentes antes del reinicio (50)
+  cluster disponible tras 5.8 s
+  [OK]  50 mensajes siguen tras el reinicio (50)
+  [OK]  DLQ conserva sus mensajes tras el reinicio (2)
+  [OK]  consumidores se reconectan solos y procesan
+  [OK]  nodos en ejecucion tras el reinicio (3)
+6. Carga: 1000 eventos CREADO concurrentes (20 en paralelo) => 3000 entregas
+  [OK]  eventos aceptados (HTTP 202) (1000)
+  ACK=3000 + DLQ=0 (motivos: )
+  [OK]  ninguna entrega perdida (ACK + DLQ) (3000)
+  [OK]  todas procesadas con ACK (ninguna por x-max-length/TTL) (3000)
+  [OK]  colas vaciadas (0/0/0)
+  [OK]  REJECT/NACK durante la prueba (0)
+  publicacion: 2.4 s -> 414 eventos/s
+  procesamiento total: 3.3 s -> 909 entregas/s
+  pico de mensajes en espera: 0
+  nodo rabbit@rabbitmq-1: memoria 198 MB (limite 9547 MB) alarma_mem=False alarma_disco=False sockets/fd=38
+  nodo rabbit@rabbitmq-2: memoria 203 MB (limite 9547 MB) alarma_mem=False alarma_disco=False sockets/fd=38
+  nodo rabbit@rabbitmq-3: memoria 199 MB (limite 9547 MB) alarma_mem=False alarma_disco=False sockets/fd=37
+  conexiones=2 canales=17 consumidores=21
+
+RESULTADO: todo OK

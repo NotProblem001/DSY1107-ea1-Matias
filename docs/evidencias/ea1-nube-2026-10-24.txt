@@ -1,0 +1,251 @@
+Evidencias EA1 Pedidos360 - 2026-10-24T19:04:50Z - arn:aws:sts::389719466677:assumed-role/voclabs/user3210364=Matias_Araos
+
+================ 1. API Manager (API Gateway HTTP) en funcionamiento ================
+{
+    "Nombre": "api-manager-matias-araos",
+    "Id": "l4wh22q9p8",
+    "Protocolo": "HTTP",
+    "Endpoint": "https://l4wh22q9p8.execute-api.us-east-1.amazonaws.com",
+    "Creada": "2026-10-24T17:50:02+00:00",
+    "CORS": {
+        "AllowCredentials": false,
+        "AllowHeaders": [
+            "authorization",
+            "content-type"
+        ],
+        "AllowMethods": [
+            "POST",
+            "PUT",
+            "OPTIONS",
+            "GET",
+            "DELETE"
+        ],
+        "AllowOrigins": [
+            "http://localhost:5173",
+            "https://main.d19qegtnjlbhlr.amplifyapp.com"
+        ],
+        "MaxAge": 300
+    }
+}
+---------------------------------------------------------
+|                       GetStages                       |
++----------------------------+--------------+-----------+
+|         Actualizado        | AutoDeploy   |   Stage   |
++----------------------------+--------------+-----------+
+|  2026-10-24T19:02:08+00:00 |  True        |  $default |
+|  2026-10-24T19:02:08+00:00 |  True        |  dev      |
++----------------------------+--------------+-----------+
+
+================ 2. Configuracion del API Manager hacia el backend (rutas, autorizador, integraciones) ================
+-------------------------------------------------------------------------------------------------------------------------------------
+|                                                             GetRoutes                                                             |
++------+-----------------------+---------------------------+------------------------------------------------------------------------+
+| Auth |        Destino        |           Ruta            |                                Scopes                                  |
++------+-----------------------+---------------------------+------------------------------------------------------------------------+
+|  JWT |  integrations/wfe3ror |  GET /datos               |  openid                                                                |
+|  JWT |  integrations/juj2las |  PUT /pedidos/{proxy+}    |  pedidos/write,solicitudes/approve,solicitudes/write,pedidos/approve   |
+|  JWT |  integrations/m0bj4tl |  POST /pedidos            |  pedidos/write,solicitudes/write                                       |
+|  JWT |  integrations/juj2las |  DELETE /pedidos/{proxy+} |  pedidos/write,solicitudes/approve,solicitudes/write,pedidos/approve   |
+|  JWT |  integrations/juj2las |  GET /pedidos/{proxy+}    |  pedidos/read,solicitudes/read                                         |
+|  NONE|  integrations/k3ebt1g |  GET /publico/datos       |                                                                        |
+|  JWT |  integrations/m0bj4tl |  GET /pedidos             |  pedidos/read,solicitudes/read                                         |
++------+-----------------------+---------------------------+------------------------------------------------------------------------+
+[
+    {
+        "Nombre": "cognito-jwt",
+        "Tipo": "JWT",
+        "Issuer": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_p5oJ2xoQK",
+        "Audiencia": [
+            "2rjhdpsebk13vvuov8efd1l74s"
+        ],
+        "Fuente": [
+            "$request.header.Authorization"
+        ]
+    }
+]
+----------------------------------------------------------------------------------
+|                                 GetIntegrations                                |
++---------+---------+-------------+----------------------------------------------+
+|   Id    | Metodo  |    Tipo     |                     URI                      |
++---------+---------+-------------+----------------------------------------------+
+|  juj2las|  ANY    |  HTTP_PROXY |  http://54.89.163.210:8080/pedidos/{proxy}   |
+|  k3ebt1g|  GET    |  HTTP_PROXY |  http://54.89.163.210:8080/publico/datos     |
+|  m0bj4tl|  ANY    |  HTTP_PROXY |  http://54.89.163.210:8080/pedidos           |
+|  wfe3ror|  GET    |  HTTP_PROXY |  http://54.89.163.210:8080/datos             |
++---------+---------+-------------+----------------------------------------------+
+
+================ 3. El API Manager valida JWT (rechaza invalidos, acepta validos, aplica scopes) ================
+GET /publico/datos sin token          -> 200
+GET /pedidos sin token                -> 401 {"message":"Unauthorized"}
+GET /pedidos token malformado         -> 401 {"message":"Unauthorized"}
+GET /pedidos firma alterada           -> 401 {"message":"Unauthorized"}
+--- lector@pedidos360.com  token=eyJraWQiOiJNVmJmZFhyM29hY...  scope: pedidos/read aws.cognito.signin.user.admin solicitudes/read  grupos: lectores
+    GET  /pedidos -> 200
+    GET  /datos   -> 403
+    POST /pedidos -> 403 {"message":"Forbidden"}
+--- cliente@pedidos360.com  token=eyJraWQiOiJNVmJmZFhyM29hY...  scope: pedidos/write pedidos/read aws.cognito.signin.user.admin solicitudes/write solicitudes/read  grupos: clientes
+    GET  /pedidos -> 200
+    GET  /datos   -> 403
+    POST /pedidos -> 201 {"id":6,"clienteEmail":"cliente@pedidos360.com","descripcion":"Evidencia informe cliente","monto":15990.0,"estado":"PENDIENTE","fechaCreacio
+--- editor@pedidos360.com  token=eyJraWQiOiJNVmJmZFhyM29hY...  scope: pedidos/read aws.cognito.signin.user.admin pedidos/approve solicitudes/approve solicitudes/read  grupos: editores
+    GET  /pedidos -> 200
+    GET  /datos   -> 403
+    POST /pedidos -> 403 {"message":"Forbidden"}
+--- admin@pedidos360.com  token=eyJraWQiOiJNVmJmZFhyM29hY...  scope: pedidos/write pedidos/read aws.cognito.signin.user.admin pedidos/approve solicitudes/write solicitudes/approve solicitudes/read  grupos: administradores
+    GET  /pedidos -> 200
+    GET  /datos   -> 403
+    POST /pedidos -> 201 {"id":7,"clienteEmail":"admin@pedidos360.com","descripcion":"Evidencia informe admin","monto":15990.0,"estado":"PENDIENTE","fechaCreacion":"
+
+================ 4. Tenant IDaaS (Cognito User Pool), cliente OAuth y usuarios registrados ================
+{
+    "Nombre": "dsy1107-matias-araos",
+    "Id": "us-east-1_p5oJ2xoQK",
+    "Dominio": "dsy1107-matias-araos",
+    "Creado": "2026-10-24T17:50:08.474000+00:00",
+    "Usuarios": 4,
+    "MFA": "OFF"
+}
+{
+    "Cliente": "spa-react",
+    "Flujos": [
+        "code"
+    ],
+    "Scopes": [
+        "aws.cognito.signin.user.admin",
+        "email",
+        "openid",
+        "profile"
+    ],
+    "Callbacks": [
+        "http://localhost:5173",
+        "http://localhost:5173/",
+        "https://main.d19qegtnjlbhlr.amplifyapp.com",
+        "https://main.d19qegtnjlbhlr.amplifyapp.com/"
+    ],
+    "IdPs": [
+        "COGNITO"
+    ]
+}
+[
+    {
+        "Id": "pedidos",
+        "Scopes": [
+            "read",
+            "approve",
+            "write"
+        ]
+    },
+    {
+        "Id": "solicitudes",
+        "Scopes": [
+            "read",
+            "approve",
+            "write"
+        ]
+    }
+]
+-----------------------------------------------------------------------------------------------------
+|                                             ListUsers                                             |
++--------+------------------------------------+------------+----------------------------------------+
+| Activo |              Creado                |  Estado    |                Usuario                 |
++--------+------------------------------------+------------+----------------------------------------+
+|  True  |  2026-10-24T17:50:09.849000+00:00  |  CONFIRMED |  b4488428-50a1-70c1-149e-1b84e69cb362  |
+|  True  |  2026-10-24T17:50:09.898000+00:00  |  CONFIRMED |  d498c448-2041-70d9-d98b-6e2fee50d4d2  |
+|  True  |  2026-10-24T17:50:09.887000+00:00  |  CONFIRMED |  84b8c458-c0a1-700a-aeb1-a3c8a0f253f9  |
+|  True  |  2026-10-24T17:50:10.217000+00:00  |  CONFIRMED |  64b82448-8001-703f-2d16-47ddca1c89f0  |
++--------+------------------------------------+------------+----------------------------------------+
+Grupo clientes: 64b82448-8001-703f-2d16-47ddca1c89f0
+Grupo editores: d498c448-2041-70d9-d98b-6e2fee50d4d2
+Grupo administradores: 84b8c458-c0a1-700a-aeb1-a3c8a0f253f9
+Grupo lectores: b4488428-50a1-70c1-149e-1b84e69cb362
+
+================ 5. OpenID Connect: discovery del tenant e ID token emitido ================
+{
+  "issuer": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_p5oJ2xoQK",
+  "authorization_endpoint": "https://dsy1107-matias-araos.auth.us-east-1.amazoncognito.com/oauth2/authorize",
+  "token_endpoint": "https://dsy1107-matias-araos.auth.us-east-1.amazoncognito.com/oauth2/token",
+  "jwks_uri": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_p5oJ2xoQK/.well-known/jwks.json",
+  "response_types_supported": [
+    "code",
+    "token"
+  ],
+  "code_challenge_methods_supported": null
+}
+{
+  "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_p5oJ2xoQK",
+  "aud": "2rjhdpsebk13vvuov8efd1l74s",
+  "token_use": "id",
+  "email": "cliente@pedidos360.com",
+  "cognito:groups": [
+    "clientes"
+  ],
+  "exp": 1792872321
+}
+
+================ 6. Backend desplegado (ECS Fargate) y base de datos cloud (RDS PostgreSQL) ================
+{
+    "Servicio": "dsy1107-backend-matias-araos",
+    "Estado": "ACTIVE",
+    "Lanzamiento": "FARGATE",
+    "Deseadas": 1,
+    "Corriendo": 1,
+    "Tarea": "arn:aws:ecs:us-east-1:389719466677:task-definition/dsy1107-backend-matias-araos:14"
+}
+{
+    "Imagen": "389719466677.dkr.ecr.us-east-1.amazonaws.com/dsy1107-backend-matias-araos:v20261024-185709",
+    "Puerto": 8080,
+    "VariablesDeEntorno": [
+        "SPRING_APPLICATION_NAME",
+        "SPRING_DATASOURCE_USERNAME",
+        "COGNITO_JWK_SET_URI",
+        "COGNITO_ISSUER_URI",
+        "SPRING_DATASOURCE_URL",
+        "SPRING_DATASOURCE_PASSWORD"
+    ]
+}
+[
+    {
+        "Id": "dsy1107-pedidos-matias-araos",
+        "Motor": "postgres",
+        "Version": "16.13",
+        "Clase": "db.t3.micro",
+        "Estado": "available",
+        "BD": "pedidos360",
+        "Endpoint": "dsy1107-pedidos-matias-araos.cn2u5klzy69n.us-east-1.rds.amazonaws.com",
+        "Publica": false,
+        "Cifrada": true
+    }
+]
+Conexion del backend a PostgreSQL (logs CloudWatch):
+2026-10-24T18:59:26.156000+00:00 ecs/backend/2bd0f086c28f4e8ea5a4981e161ee6d3 2026-10-24T18:59:26.156Z  INFO 7 --- [backend-pedidos360] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@278cb145
+2026-10-24T18:59:41.850000+00:00 ecs/backend/d7c1aad399df421fa975e901b362981b 2026-10-24T18:59:41.849Z  INFO 7 --- [backend-pedidos360] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@56b704ea
+
+================ 7. Frontend desplegado (Amplify) e integrado con Cognito y API Gateway ================
+{
+    "Nombre": "dsy1107-Matias-Araos",
+    "Dominio": "d19qegtnjlbhlr.amplifyapp.com",
+    "Plataforma": "WEB"
+}
+----------------------------------------------------------------
+|                           ListJobs                           |
++---------+------------------------------------+------+--------+
+| Estado  |                Fin                 | Job  | Tipo   |
++---------+------------------------------------+------+--------+
+|  SUCCEED|  2026-10-24T19:03:29.286000+00:00  |  1   |  None  |
++---------+------------------------------------+------+--------+
+GET https://main.d19qegtnjlbhlr.amplifyapp.com/ -> 200 (DSY1107 · Authorization Code + PKCE)
+GET https://main.d19qegtnjlbhlr.amplifyapp.com/config.json -> 200
+{
+  "region": "us-east-1",
+  "cognitoDomain": "https://dsy1107-matias-araos.auth.us-east-1.amazoncognito.com",
+  "clientId": "2rjhdpsebk13vvuov8efd1l74s",
+  "redirectUri": "https://main.d19qegtnjlbhlr.amplifyapp.com/",
+  "apiUrl": "https://l4wh22q9p8.execute-api.us-east-1.amazonaws.com"
+}
+
+CORS preflight desde el frontend hacia API Gateway:
+HTTP/2 204 
+access-control-allow-origin: https://main.d19qegtnjlbhlr.amplifyapp.com
+access-control-allow-methods: DELETE,GET,OPTIONS,POST,PUT
+access-control-allow-headers: authorization,content-type
+access-control-max-age: 300

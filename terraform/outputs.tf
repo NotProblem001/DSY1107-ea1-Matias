@@ -60,6 +60,11 @@ output "ecs_servicio" {
   value       = aws_ecs_service.backend.name
 }
 
+output "rds_endpoint" {
+  description = "Endpoint privado de PostgreSQL (RDS) usado por el backend"
+  value       = aws_db_instance.backend.endpoint
+}
+
 # --- Identificadores para Scripts y Pipelines (publicar-ecs.sh / backend_deploy.yml) ---
 output "api_id" {
   description = "ID de la API en API Gateway"

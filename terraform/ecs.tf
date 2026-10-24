@@ -127,6 +127,19 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "COGNITO_JWK_SET_URI"
           value = "https://${aws_cognito_user_pool.pool.endpoint}/.well-known/jwks.json"
+        },
+        {
+          name  = "SPRING_DATASOURCE_URL"
+          value = "jdbc:postgresql://${aws_db_instance.backend.endpoint}/${aws_db_instance.backend.db_name}"
+        },
+        {
+          name  = "SPRING_DATASOURCE_USERNAME"
+          value = aws_db_instance.backend.username
+        },
+        {
+          # shortcut: clave en texto plano en la task definition; usar secrets (Secrets Manager/SSM) fuera de AWS Academy
+          name  = "SPRING_DATASOURCE_PASSWORD"
+          value = random_password.db.result
         }
       ]
       logConfiguration = {

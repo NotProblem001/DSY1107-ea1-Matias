@@ -217,10 +217,10 @@ export default function App() {
           )}
 
           {pestanaActiva === 'tokens' && <InspectorJwt tokens={tokens} idClaims={idClaims} accessClaims={accessClaims} />}
-
-          {resultadoApi && <ResultadoApi resultado={resultadoApi} />}
         </>
       )}
+
+      {resultadoApi && <ResultadoApi resultado={resultadoApi} />}
     </main>
   )
 }
