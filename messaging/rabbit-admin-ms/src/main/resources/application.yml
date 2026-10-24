@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: rabbit-admin-ms
+  rabbitmq:
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672,localhost:5673,localhost:5674}
+    address-shuffle-mode: random
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASS:admin123}
+
+server:
+  port: 8097
+
+management:
+  endpoints.web.exposure.include: health,info
+
+# Alertas: cada intervalo revisa estas colas con RabbitAdmin.getQueueInfo
+monitoreo:
+  intervalo-ms: 30000
+  umbral-mensajes: 100        # cola principal con mas mensajes en espera => alerta de acumulacion
+  colas:
+    - notificaciones.queue
+    - tickets.queue
+    - documentos.queue
+    - notificaciones.dlq
+    - tickets.dlq
+    - documentos.dlq

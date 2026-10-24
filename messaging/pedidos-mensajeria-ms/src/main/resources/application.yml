@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: pedidos-mensajeria-ms
+  rabbitmq:
+    # Los 3 nodos del cluster: si cae uno, el cliente se reconecta al siguiente
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672,localhost:5673,localhost:5674}
+    address-shuffle-mode: random
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASS:admin123}
+    # Publisher confirms + returns: el productor sabe si el broker guardo o no pudo enrutar el mensaje
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: manual   # cada consumidor decide ACK / NACK / REJECT
+        prefetch: 1                # fair dispatch
+        concurrency: 1
+        max-concurrency: 3
+        default-requeue-rejected: false
+
+server:
+  port: 8091
+
+management:
+  endpoints.web.exposure.include: health,info
+
+# ============================================================================
+# Topologia RabbitMQ centralizada: ninguna clase escribe nombres a mano.
+# ============================================================================
+mensajeria:
+  exchanges:
+    eventos: pedidos.eventos                 # topic: eventos de dominio del pedido
+    eventos-routing-key: pedido.%s           # pedido.creado | pedido.actualizado | pedido.cancelado
+    documentos: pedidos.documentos           # direct: solicitudes de generacion de documentos
+    dlx: pedidos.dlx                         # direct: Dead Letter Exchange comun
+  colas:
+    notificaciones:
+      nombre: notificaciones.queue
+      routing-key: "pedido.#"                # recibe todos los eventos del pedido
+      dlq: notificaciones.dlq
+      dlq-routing-key: notificaciones.dead
+    tickets:
+      nombre: tickets.queue
+      routing-key: pedido.creado             # solo pedidos nuevos generan ticket
+      dlq: tickets.dlq
+      dlq-routing-key: tickets.dead
+    documentos:
+      nombre: documentos.queue
+      routing-key: documento.factura
+      dlq: documentos.dlq
+      dlq-routing-key: documentos.dead
+  politicas:
+    ttl-ms: 60000          # x-message-ttl de las colas principales
+    max-length: 1000       # x-max-length (overflow drop-head: el mas antiguo va a la DLQ)
+    max-reintentos: 3      # reintentos de un error transitorio (header x-reintentos) antes de NACK -> DLQ
+    delivery-limit: 5      # x-delivery-limit: red de seguridad si el consumidor cae sin confirmar
+    dlq-ttl-ms: 86400000   # retencion de 24 h en las DLQ
+  # false: los mensajes muertos se quedan en las DLQ (util para mostrarlos en el panel)
+  auditoria-dlq-activa: ${AUDITORIA_DLQ_ACTIVA:true}
