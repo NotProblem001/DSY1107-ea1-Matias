@@ -89,3 +89,9 @@ Fuente: `CloudNative/EP3_DSY1107_Estudiante_encargo.pdf`, `EP4_..._presentación
   - `backend_compile` ahora valida PR.
   - Los deploys fallan por credenciales vencidas de AWS Academy en los secrets (acción del usuario).
   - Detalle en `PLAN_EJECUCION_RABBITMQ.md` y `PRUEBAS_RABBITMQ_EVIDENCIA.md`.
+- **Revisión post-auditoría:**
+  - Los 5 contenedores están arriba y `/alertas` está vacío.
+  - Los errores del log son todos esperados: el reinicio intencional de los nodos (14:18:00) y los fallos simulados de los pedidos 102/103 de la E2E.
+  - Rama sincronizada con `origin` (`54f438d`) y sin cambios pendientes.
+  - Brecha abierta: frontend Angular.
+- **Revisión siguiente:** sin cambios. 5/5 contenedores arriba, logs limpios.
