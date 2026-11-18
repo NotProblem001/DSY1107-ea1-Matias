@@ -20,4 +20,20 @@ public class KafkaTopicConfig {
 				.replicas(1)
 				.build();
 	}
+
+	@Bean
+	public NewTopic pedidosEventosTopic(@Value("${pedidos.pipeline.topic-entrada}") String topic) {
+		return TopicBuilder.name(topic)
+				.partitions(3)
+				.replicas(1)
+				.build();
+	}
+
+	@Bean
+	public NewTopic pedidosAlertasTopic(@Value("${pedidos.pipeline.topic-alertas}") String topic) {
+		return TopicBuilder.name(topic)
+				.partitions(3)
+				.replicas(1)
+				.build();
+	}
 }

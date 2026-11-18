@@ -15,6 +15,13 @@ spring:
       properties:
         # El default de kafka-clients 3.7 es sticky (sin key llena una particion por lote); ver README
         partitioner.class: com.DSY1107.streaming.config.PedidoPartitioner
+    streams:
+      application-id: pedidos-pipeline-app
+      properties:
+        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        spring.json.trusted.packages: "*"
+        # un JSON invalido en pedidos-eventos se loguea y se salta en vez de detener el pipeline
+        default.deserialization.exception.handler: org.apache.kafka.streams.errors.LogAndContinueExceptionHandler
 
 server:
   port: 8092
@@ -22,6 +29,11 @@ server:
 pedidos:
   kafka:
     topic: pedidos-particiones
+  pipeline:
+    topic-entrada: pedidos-eventos
+    topic-alertas: pedidos-alertas
+    monto-minimo: 1000
+    monto-sospechoso: 1000000
 
 management:
   endpoints:

@@ -47,3 +47,8 @@ terraform-rabbitmq/.build/
 terraform-rabbitmq/terraform.tfstate*
 terraform-rabbitmq/.terraform.lock.hcl
 terraform-rabbitmq/tfplan
+# Terraform de paridad Kafka (Unidad 3, no se aplica)
+terraform-kafka/.terraform/
+terraform-kafka/terraform.tfstate*
+terraform-kafka/.terraform.lock.hcl
+terraform-kafka/tfplan

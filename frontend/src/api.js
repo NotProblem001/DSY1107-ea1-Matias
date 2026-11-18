@@ -1,19 +1,20 @@
 import { config, cargarConfiguracion } from './auth.js'
 
-async function obtenerApiBase() {
+async function obtenerApiBase(clave = 'apiUrl') {
   await cargarConfiguracion()
-  const base = config.apiUrl || import.meta.env.VITE_API_BASE
+  const base = config[clave] || (clave === 'apiUrl' ? import.meta.env.VITE_API_BASE : '')
   if (!base) {
-    throw new Error('Falta apiUrl en config.json o VITE_API_BASE en .env')
+    throw new Error(`Falta ${clave} en config.json`)
   }
   return base.replace(/\/+$/, '')
 }
 
 /**
- * Petición genérica con diagnóstico de seguridad HTTP
+ * Petición genérica con diagnóstico de seguridad HTTP.
+ * clave elige la API: 'apiUrl' (backend EA1), 'rabbitUrl' o 'streamingUrl' (mensajería).
  */
-async function realizarPeticion(ruta, opciones = {}) {
-  const apiBase = await obtenerApiBase()
+async function realizarPeticion(ruta, opciones = {}, clave = 'apiUrl') {
+  const apiBase = await obtenerApiBase(clave)
   const url = `${apiBase}${ruta}`
 
   const respuesta = await fetch(url, opciones)
@@ -144,3 +145,26 @@ export async function obtenerInfoPublica() {
 export async function obtenerSolicitudes(accessToken) {
   return obtenerPedidos(accessToken)
 }
+
+// ---------- Mensajería (RabbitMQ y Kafka en AWS, API Gateway propio con JWT) ----------
+
+function mensajeria(clave, ruta, accessToken, metodo = 'GET', cuerpo) {
+  const headers = { Authorization: `Bearer ${accessToken}` }
+  if (cuerpo !== undefined) headers['Content-Type'] = 'application/json'
+  return realizarPeticion(ruta, { method: metodo, headers, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) }, clave)
+}
+
+// Kafka 3.2.1: particiones y offsets
+export const kafkaDemo = (t) => mensajeria('streamingUrl', '/streaming/demo', t, 'POST')
+export const kafkaConKey = (t, key, mensaje) =>
+  mensajeria('streamingUrl', `/streaming/con-key?key=${encodeURIComponent(key)}&mensaje=${encodeURIComponent(mensaje)}`, t, 'POST')
+export const kafkaRecibidos = (t) => mensajeria('streamingUrl', '/streaming/recibidos', t)
+
+// Kafka Streams 3.2.2: pipeline pedidos-eventos -> pedidos-alertas
+export const pipelineEvento = (t, evento) => mensajeria('streamingUrl', '/pipeline/evento', t, 'POST', evento)
+export const pipelineAlertas = (t) => mensajeria('streamingUrl', '/pipeline/alertas', t)
+
+// RabbitMQ EP3: eventos de pedido, colas y monitoreo
+export const rabbitPublicar = (t, evento) => mensajeria('rabbitUrl', '/eventos/pedidos', t, 'POST', evento)
+export const rabbitCola = (t, nombre) => mensajeria('rabbitUrl', `/rabbitmq/queues/${encodeURIComponent(nombre)}`, t)
+export const rabbitAlertas = (t) => mensajeria('rabbitUrl', '/rabbitmq/alertas', t)

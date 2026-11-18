@@ -2,6 +2,7 @@ package com.DSY1107.streaming.producer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
@@ -15,7 +16,7 @@ public class PedidoKafkaProducer {
 	private final KafkaTemplate<String, String> kafkaTemplate;
 	private final String topic;
 
-	public PedidoKafkaProducer(KafkaTemplate<String, String> kafkaTemplate,
+	public PedidoKafkaProducer(@Qualifier("kafkaTemplate") KafkaTemplate<String, String> kafkaTemplate,
 			@Value("${pedidos.kafka.topic}") String topic) {
 		this.kafkaTemplate = kafkaTemplate;
 		this.topic = topic;

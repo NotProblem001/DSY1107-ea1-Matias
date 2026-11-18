@@ -21,6 +21,8 @@ x-ms: &ms
     RABBITMQ_ADDRESSES: rabbitmq-1:5672,rabbitmq-2:5672,rabbitmq-3:5672
     RABBITMQ_USER: ${RABBITMQ_USER:-admin}
     RABBITMQ_PASS: ${RABBITMQ_PASS:-admin123}
+    # en AWS lo agrega API Gateway como header; vacio en local = sin filtro
+    ORIGEN_SECRETO: ${ORIGEN_SECRETO:-}
   depends_on:
     rabbitmq-1: { condition: service_healthy }
     rabbitmq-2: { condition: service_healthy }

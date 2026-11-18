@@ -11,6 +11,10 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    # persistir ZK junto con kafka_data: si no, tras "down" ZK genera otro cluster id y Kafka no arranca
+    volumes:
+      - zk_data:/var/lib/zookeeper/data
+      - zk_log:/var/lib/zookeeper/log
     networks:
       - kafka_net
 
@@ -49,8 +53,27 @@ services:
     networks:
       - kafka_net
 
+  # Solo con "docker compose --profile apps up -d" (asi se usa en la EC2); en local se corre con mvnw.
+  pedidos-streaming-ms:
+    build: ./pedidos-streaming-ms
+    image: ${IMAGEN_STREAMING:-pedidos360/pedidos-streaming-ms:local}
+    container_name: pedidos-streaming-ms
+    profiles: [apps]
+    depends_on:
+      - kafka
+    ports:
+      - "8092:8092"
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      ORIGEN_SECRETO: ${ORIGEN_SECRETO:-}
+    restart: unless-stopped
+    networks:
+      - kafka_net
+
 volumes:
   kafka_data:
+  zk_data:
+  zk_log:
 
 networks:
   kafka_net:

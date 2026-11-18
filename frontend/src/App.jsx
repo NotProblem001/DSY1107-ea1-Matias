@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  config,
   configIncompleta,
   cargarConfiguracion,
   decodificarJwt,
@@ -17,6 +18,7 @@ import PantallaLogin from './components/PantallaLogin.jsx'
 import PanelSesion from './components/PanelSesion.jsx'
 import PestanaPedidos from './components/PestanaPedidos.jsx'
 import PestanaScopeGuard from './components/PestanaScopeGuard.jsx'
+import PestanaMensajeria from './components/PestanaMensajeria.jsx'
 import InspectorJwt from './components/InspectorJwt.jsx'
 import ResultadoApi from './components/ResultadoApi.jsx'
 
@@ -182,7 +184,12 @@ export default function App() {
           <PanelSesion tokens={tokens} permisos={permisos} vencido={vencido} onRenovar={renovarSesion} onLogout={logout} />
 
           <div className="tabs">
-            {[{ id: 'pedidos', titulo: tituloPedidos }, ...PESTANAS].map((p) => (
+            {[
+              { id: 'pedidos', titulo: tituloPedidos },
+              ...PESTANAS,
+              // solo si config.json trae las APIs de mensajería (terraform-rabbitmq / terraform-kafka desplegados)
+              ...(configCargada && (config.rabbitUrl || config.streamingUrl) ? [{ id: 'mensajeria', titulo: 'Mensajería en vivo' }] : []),
+            ].map((p) => (
               <button
                 key={p.id}
                 className={`tab-boton ${pestanaActiva === p.id ? 'activo' : ''}`}
@@ -215,6 +222,8 @@ export default function App() {
               ejecutarAccion={ejecutarAccion}
             />
           )}
+
+          {pestanaActiva === 'mensajeria' && <PestanaMensajeria accessToken={tokens.access_token} emailUsuario={emailUsuario} />}
 
           {pestanaActiva === 'tokens' && <InspectorJwt tokens={tokens} idClaims={idClaims} accessClaims={accessClaims} />}
         </>

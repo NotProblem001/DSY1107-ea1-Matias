@@ -53,6 +53,22 @@ variable "tag_imagen" {
   default     = "v1"
 }
 
+variable "cognito_user_pool_id" {
+  description = "User Pool de la EA1 (terraform/); desplegar.sh lo resuelve con la AWS CLI"
+  type        = string
+}
+
+variable "cognito_client_id" {
+  description = "Client 'spa-react' del User Pool; es el audience del JWT que manda el frontend"
+  type        = string
+}
+
+variable "origenes_cors" {
+  description = "Origenes del frontend que pueden llamar al API de mensajeria"
+  type        = list(string)
+  default     = ["http://localhost:5173"]
+}
+
 variable "instance_profile" {
   description = "AWS Academy no permite crear roles IAM: se usa el perfil existente del Learner Lab"
   type        = string
@@ -82,13 +98,26 @@ resource "aws_security_group" "rabbitmq" {
   vpc_id      = data.aws_vpc.default.id
 
   dynamic "ingress" {
-    for_each = { panel-1 = 15672, panel-2 = 15673, panel-3 = 15674, amqp = 5672, eventos = 8091, admin = 8097 }
+    for_each = { panel-1 = 15672, panel-2 = 15673, panel-3 = 15674, amqp = 5672 }
     content {
       description = ingress.key
       from_port   = ingress.value
       to_port     = ingress.value
       protocol    = "tcp"
       cidr_blocks = [var.ip_permitida]
+    }
+  }
+
+  # API Gateway sale por IPs de AWS no fijas: las APIs quedan abiertas, pero FiltroOrigen exige el header
+  # secreto que solo agrega API Gateway (api.tf) despues de validar el JWT.
+  dynamic "ingress" {
+    for_each = { eventos = 8091, admin = 8097 }
+    content {
+      description = "${ingress.key} (via API Gateway)"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
     }
   }
 
@@ -116,6 +145,11 @@ resource "random_password" "rabbitmq" {
 }
 
 resource "random_password" "cookie" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "origen" {
   length  = 32
   special = false
 }
@@ -153,6 +187,7 @@ resource "aws_instance" "rabbitmq" {
     region        = var.aws_region
     rabbitmq_pass = random_password.rabbitmq.result
     erlang_cookie = random_password.cookie.result
+    origen        = random_password.origen.result
   })
 
   tags = {
@@ -160,10 +195,28 @@ resource "aws_instance" "rabbitmq" {
   }
 }
 
+# IP fija: el Learner Lab apaga la EC2 al cerrar sesion y sin EIP volveria con otra IP,
+# dejando las integraciones de API Gateway apuntando a la vieja.
+resource "aws_eip" "rabbitmq" {
+  instance = aws_instance.rabbitmq.id
+  domain   = "vpc"
+}
+
+# Entradas para api.tf (mismo archivo en terraform-kafka/)
+locals {
+  nombre_api = "pedidos360-rabbitmq-api"
+  ip_backend = aws_eip.rabbitmq.public_ip
+  rutas = {
+    "POST /eventos/pedidos"         = "8091/api/eventos/pedidos"
+    "GET /rabbitmq/queues/{nombre}" = "8097/api/rabbitmq/queues/{nombre}"
+    "GET /rabbitmq/alertas"         = "8097/api/rabbitmq/alertas"
+  }
+}
+
 # ---------- Salidas ----------
 
 output "ip_publica" {
-  value = aws_instance.rabbitmq.public_ip
+  value = aws_eip.rabbitmq.public_ip
 }
 
 output "instance_id" {
@@ -171,7 +224,7 @@ output "instance_id" {
 }
 
 output "panel_rabbitmq" {
-  value = "http://${aws_instance.rabbitmq.public_ip}:15672 (usuario admin)"
+  value = "http://${aws_eip.rabbitmq.public_ip}:15672 (usuario admin)"
 }
 
 output "ecr_repositorios" {

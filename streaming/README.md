@@ -110,3 +110,67 @@ docker build -t pedidos-streaming-ms .
 docker run --rm -p 8092:8092 --network streaming_kafka_net \
   -e KAFKA_BOOTSTRAP=kafka:29092 pedidos-streaming-ms
 ```
+
+---
+
+## 3.2.2 Pipeline end-to-end (Kafka Streams)
+
+Pipeline **stateless** de la guía 3.2.2 en `streams/PedidoPipelineTopology`, en la misma app que el 3.2.1 (`application-id: pedidos-pipeline-app`):
+
+```
+pedidos-eventos ──► filter(monto >= 1000)       ── descarta montos irrelevantes ─► peek "Pedido procesado: <monto>"
+                ──► filter(monto > 1000000)     ── detecta anómalos
+                ──► mapValues(AlertaPedido)     ── motivo "Pedido inusualmente alto en canal <canal>", severidad ALTA
+                ──► peek "ALERTA GENERADA: <motivo>"
+                ──► pedidos-alertas
+```
+
+| Topic | Rol | Particiones / réplicas | Mensaje |
+|---|---|---|---|
+| `pedidos-eventos` | entrada | 3 / 1 | `EventoPedido {cliente, monto, canal, timestamp}`, key = cliente |
+| `pedidos-alertas` | salida | 3 / 1 | `AlertaPedido {cliente, monto, motivo, severidad}` |
+
+Los umbrales y los nombres de topic se definen en `pedidos.pipeline.*` (`application.yml`). Si llega un JSON inválido a `pedidos-eventos`, se loguea y se salta (`LogAndContinueExceptionHandler`) en vez de detener el pipeline. **Tradeoff:** el mensaje inválido se descarta con solo un WARN en el log, y en producción eso puede esconder bugs. Lo correcto sería desviarlo a un topic de errores (DLQ), pero eso queda fuera de esta guía.
+
+Por qué hay dos `KafkaTemplate`: Spring Boot crea `kafkaTemplate` y `kafkaProducerFactory` solo si no existe otro bean de ese tipo (`@ConditionalOnMissingBean`). `config/KafkaProducerConfig` declara el `kafkaTemplate` String del 3.2.1 de forma explícita, sobre el producerFactory autoconfigurado, y arma el `eventoKafkaTemplate` JSON con un factory inline que no se expone como bean. Así el 3.2.1 no cambia.
+
+### Cómo probar
+
+```bash
+cd streaming && docker compose up -d
+cd pedidos-streaming-ms && ./mvnw spring-boot:run     # espera "State transition from REBALANCING to RUNNING"
+
+# Los 3 casos de una vez: NORMAL 50000, SOSPECHOSO 2000000, IGNORADO 500
+curl -X POST http://localhost:8092/api/pipeline/demo
+
+# O uno por uno (timestamp opcional: si falta lo pone el servidor)
+curl -X POST http://localhost:8092/api/pipeline/evento -H "Content-Type: application/json" \
+  -d '{"cliente":"ana","monto":50000,"canal":"web"}'        # normal: se procesa, sin alerta
+curl -X POST http://localhost:8092/api/pipeline/evento -H "Content-Type: application/json" \
+  -d '{"cliente":"bruno","monto":2000000,"canal":"app"}'    # sospechoso: genera alerta
+curl -X POST http://localhost:8092/api/pipeline/evento -H "Content-Type: application/json" \
+  -d '{"cliente":"carla","monto":500,"canal":"sucursal"}'   # ignorado: se filtra
+
+# Ver la salida
+docker exec pedidos360-kafka kafka-console-consumer --bootstrap-server localhost:9092 \
+  --topic pedidos-alertas --from-beginning --timeout-ms 10000
+```
+
+### Qué observar como evidencia
+
+- En el log, `Pedido procesado: 50000.0` y `Pedido procesado: 2000000.0`; **nada** para 500.
+- `ALERTA GENERADA: Pedido inusualmente alto en canal app` aparece **solo** para el sospechoso.
+- En `pedidos-alertas` (console-consumer o Kafka-UI http://localhost:8085 → Topics → pedidos-alertas → Messages) aparece el JSON `{"cliente":...,"monto":2000000.0,"motivo":"Pedido inusualmente alto en canal app","severidad":"ALTA"}`.
+- La corrida real está en [`EVIDENCIA_PIPELINE.md`](EVIDENCIA_PIPELINE.md).
+
+### Siguiente paso (no implementado, igual que en la guía)
+
+La **agregación del total por cliente** requiere estado: `groupByKey()` → `windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5)))` → `aggregate(...)`, con un state store (RocksDB) y un topic changelog. Con eso se detectaría, por ejemplo, a un cliente que en una ventana de 5 minutos hace muchos pedidos chicos que juntos superan el umbral.
+
+### Dónde corre cada cosa (local + AWS)
+
+- **Local (Docker y mvnw):** Kafka, Kafka-UI y `pedidos-streaming-ms`. Es el entregable de la Unidad 3 y no tiene costo.
+- **AWS:** solo el backend, con el stack existente `terraform/` (API Gateway, ECS, Cognito, RDS).
+- El broker se configura por entorno con `KAFKA_BOOTSTRAP` (default `localhost:9092`; dentro de la red Docker, `kafka:29092`). El pipeline no depende del backend ni de Cognito.
+
+- `terraform-kafka/` es solo **IaC de paridad** con `terraform-rabbitmq/` (una EC2 con este compose). Se valida con `init` y `validate` (y `plan` si hay credenciales), pero **no se aplica**. Su README explica la limitación de `KAFKA_ADVERTISED_LISTENERS=localhost` para un uso remoto.

@@ -9,6 +9,9 @@ let runtimeConfig = {
   clientId: import.meta.env.VITE_COGNITO_CLIENT_ID || '',
   redirectUri: import.meta.env.VITE_REDIRECT_URI || 'http://localhost:5173/',
   apiUrl: import.meta.env.VITE_API_BASE || '',
+  // APIs de mensajeria (terraform-rabbitmq / terraform-kafka); opcionales: sin ellas no se muestra la pestaña
+  rabbitUrl: import.meta.env.VITE_RABBIT_URL || '',
+  streamingUrl: import.meta.env.VITE_STREAMING_URL || '',
   scopes: ['openid', 'email', 'profile', 'aws.cognito.signin.user.admin'],
 }
 
@@ -31,6 +34,8 @@ export async function cargarConfiguracion() {
         runtimeConfig.redirectUri = json.redirectUri
       }
       if (json.apiUrl && !json.apiUrl.includes('exampleapi')) runtimeConfig.apiUrl = json.apiUrl
+      if (json.rabbitUrl) runtimeConfig.rabbitUrl = json.rabbitUrl
+      if (json.streamingUrl) runtimeConfig.streamingUrl = json.streamingUrl
     }
   } catch {
     // Si falla, se conservan los valores inyectados por Vite (import.meta.env)

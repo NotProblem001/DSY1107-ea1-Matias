@@ -1,11 +1,15 @@
 package com.DSY1107.streaming.controller;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.DSY1107.streaming.consumer.RegistroStreaming;
 import com.DSY1107.streaming.producer.PedidoKafkaProducer;
 
 @RestController
@@ -13,9 +17,17 @@ import com.DSY1107.streaming.producer.PedidoKafkaProducer;
 public class PedidoStreamingController {
 
 	private final PedidoKafkaProducer producer;
+	private final RegistroStreaming registro;
 
-	public PedidoStreamingController(PedidoKafkaProducer producer) {
+	public PedidoStreamingController(PedidoKafkaProducer producer, RegistroStreaming registro) {
 		this.producer = producer;
+		this.registro = registro;
+	}
+
+	/** Ultimos mensajes consumidos (mas nuevo primero), con particion y offset, para el frontend. */
+	@GetMapping("/recibidos")
+	public List<RegistroStreaming.Recibido> recibidos() {
+		return registro.recibidos();
 	}
 
 	@PostMapping("/sin-key")

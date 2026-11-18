@@ -13,6 +13,8 @@
 # Opcional:
 #   DESTINO   ruta del archivo a escribir
 #             (por defecto: <raiz>/frontend/public/config.json)
+#   RABBIT_URL STREAMING_URL  APIs de mensajería (output api_url de terraform-rabbitmq /
+#             terraform-kafka); si faltan, el frontend no muestra la pestaña
 #   EXIGIR_HTTPS=1  falla si REDIRECT_URI no es https, para no publicar en
 #                   Amplify un bundle que apunta a localhost
 # =============================================================================
@@ -47,7 +49,11 @@ jq -n \
   --arg clientId      "$CLIENT_ID" \
   --arg redirectUri   "$REDIRECT_URI" \
   --arg apiUrl        "$API_URL" \
-  '{region:$region, cognitoDomain:$cognitoDomain, clientId:$clientId, redirectUri:$redirectUri, apiUrl:$apiUrl}' \
+  --arg rabbitUrl     "${RABBIT_URL:-}" \
+  --arg streamingUrl  "${STREAMING_URL:-}" \
+  '{region:$region, cognitoDomain:$cognitoDomain, clientId:$clientId, redirectUri:$redirectUri, apiUrl:$apiUrl}
+   + (if $rabbitUrl    != "" then {rabbitUrl:$rabbitUrl}       else {} end)
+   + (if $streamingUrl != "" then {streamingUrl:$streamingUrl} else {} end)' \
   > "$DESTINO"
 
 echo "config.json escrito en $DESTINO (redirectUri: $REDIRECT_URI)"

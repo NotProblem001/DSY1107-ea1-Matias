@@ -53,6 +53,9 @@ jobs:
           CLIENT_ID_VAR: ${{ vars.COGNITO_CLIENT_ID }}
           REDIRECT_URI_VAR: ${{ vars.REDIRECT_URI }}
           API_URL_VAR: ${{ vars.API_URL }}
+          # opcionales: APIs de mensajería (terraform-rabbitmq / terraform-kafka); vacías = sin pestaña Mensajería
+          RABBIT_URL: ${{ vars.RABBIT_URL }}
+          STREAMING_URL: ${{ vars.STREAMING_URL }}
           APP_ID_VAR: ${{ vars.AMPLIFY_APP_ID }}
           RAMA: ${{ vars.AMPLIFY_BRANCH || 'main' }}
         run: |
