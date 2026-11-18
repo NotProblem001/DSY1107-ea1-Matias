@@ -31,6 +31,15 @@ class PedidoPartitionerTest {
 	}
 
 	@Test
+	@SuppressWarnings("deprecation")
+	void llamadaRepetidaPorLoteNuevoNoSaltaParticion() {
+		assertEquals(0, partitioner.partition(TOPIC, null, null, "v", null, cluster));
+		partitioner.onNewBatch(TOPIC, cluster, 0); // el productor reintenta tras abrir lote
+		assertEquals(0, partitioner.partition(TOPIC, null, null, "v", null, cluster));
+		assertEquals(1, partitioner.partition(TOPIC, null, null, "v", null, cluster));
+	}
+
+	@Test
 	void mismaKeyCaeSiempreEnLaMismaParticion() {
 		byte[] key = "cliente-A".getBytes(StandardCharsets.UTF_8);
 		int primera = partitioner.partition(TOPIC, "cliente-A", key, "v", null, cluster);

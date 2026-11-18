@@ -36,10 +36,11 @@ public class PedidoStreamingController {
 		for (int i = 1; i <= 4; i++) {
 			producer.enviarSinKey("pedido-sin-key-" + i);
 		}
-		String[] keys = {"cliente-A", "cliente-B", "cliente-A", "cliente-C", "cliente-B"};
+		// keys elegidas porque murmur2 % 3 las deja en particiones distintas (A->0, E->1, F->2)
+		String[] keys = {"cliente-A", "cliente-E", "cliente-A", "cliente-F", "cliente-E"};
 		for (int i = 0; i < keys.length; i++) {
 			producer.enviarConKey(keys[i], "pedido-" + keys[i] + "-" + (i + 1));
 		}
-		return ResponseEntity.accepted().body("Demo enviada: 4 mensajes sin key y 5 con key (cliente-A, cliente-B, cliente-C). Revisa el log del consumidor.");
+		return ResponseEntity.accepted().body("Demo enviada: 4 mensajes sin key y 5 con key (cliente-A, cliente-E, cliente-F). Revisa el log del consumidor.");
 	}
 }

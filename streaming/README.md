@@ -19,6 +19,8 @@ Está aislado de `messaging/` (RabbitMQ) y `backend/`: no comparte puertos ni re
 - **Con key:** la partición se calcula con `murmur2(key) % particiones`. Todos los mensajes con la misma key caen **siempre en la misma partición**, así que su orden queda garantizado.
 - **Sin key:** el **default real de este Kafka (kafka-clients 3.7, viene con Spring Boot 3.3.4) NO es round-robin**. Desde Kafka 3.3 (KIP-794) se usa *sticky partitioning*: el productor llena un lote en una sola partición antes de pasar a otra, porque así se envían menos peticiones y hay menos latencia. Con un lote corto y rápido como `/demo`, todos los mensajes sin key caerían casi seguro en **una sola** partición. La guía describe el round-robin, que era el comportamiento de clientes más antiguos.
 - Para **hacer visible la distribución**, este proyecto registra un particionador propio, `config/PedidoPartitioner` (en `application.yml`, `spring.kafka.producer.properties.partitioner.class`). Sin key hace **round-robin estricto** (0, 1, 2, 0…). Con key usa el **mismo hash murmur2 que el default**, así que el comportamiento con key no cambia. Si quitas esa propiedad vuelves al sticky real, y también sirve para mostrarlo.
+- Detalle técnico: cuando el productor abre un lote nuevo, llama `partition()` **dos veces** para el mismo mensaje (vía `onNewBatch`, bug conocido KAFKA-9965, que también afecta al `RoundRobinPartitioner` de Kafka). `PedidoPartitioner.onNewBatch` retrocede el contador para que el round-robin no se salte particiones.
+- Las keys de `/demo` (`cliente-A`, `cliente-E`, `cliente-F`) se eligieron porque `murmur2 % 3` las reparte en particiones distintas (0, 1 y 2). Con `cliente-A/B/C/D` todas caen en la 0: el hash no promete repartir pocas keys de forma pareja.
 
 ## Pasos
 
@@ -39,7 +41,7 @@ cd streaming/pedidos-streaming-ms
 ### Enviar mensajes
 
 ```bash
-# Lote de evidencia: 4 sin key + 5 con key (cliente-A, cliente-B, cliente-C)
+# Lote de evidencia: 4 sin key + 5 con key (cliente-A, cliente-E, cliente-F)
 curl -X POST http://localhost:8092/api/streaming/demo
 
 # Un mensaje sin key
@@ -76,22 +78,27 @@ docker exec -it pedidos360-kafka kafka-consumer-groups --describe \
 1. `kafka-topics --describe` (o Kafka-UI → Topics → `pedidos-particiones`): **PartitionCount 3, ReplicationFactor 1**.
 2. Log del microservicio después de `POST /demo`, líneas `RECIBIDO | ...`:
    - Los mensajes **sin key** (`key=null`) aparecen en las particiones **0, 1 y 2**.
-   - Cada mensaje de **`cliente-A`** cae en la **misma partición**, y lo mismo pasa con `cliente-B` y `cliente-C`.
+   - Cada mensaje de **`cliente-A`** cae en la **misma partición**, y lo mismo pasa con `cliente-E` y `cliente-F`.
    - El **offset** crece por separado **dentro de cada partición** (cada partición tiene su propia secuencia desde 0).
    - Las líneas `ENVIADO | particion=... offset=...` del productor confirman la misma partición y el mismo offset desde el lado del envío.
 3. Kafka-UI → Topics → `pedidos-particiones` → **Messages**: columnas Partition, Offset y Key.
 4. Si llamas `/demo` otra vez, cada key vuelve a su misma partición y los offsets siguen desde donde iban.
 
-Ejemplo de lo esperado (el número de partición de cada key depende del hash):
+Salida real del primer `POST /demo` con el topic vacío (el log viene agrupado por partición, porque el consumidor lee cada una por separado):
 
 ```
 RECIBIDO | topic=pedidos-particiones particion=0 offset=0 key=null value=pedido-sin-key-1
-RECIBIDO | topic=pedidos-particiones particion=1 offset=0 key=null value=pedido-sin-key-2
-RECIBIDO | topic=pedidos-particiones particion=2 offset=0 key=null value=pedido-sin-key-3
 RECIBIDO | topic=pedidos-particiones particion=0 offset=1 key=null value=pedido-sin-key-4
-RECIBIDO | topic=pedidos-particiones particion=X offset=... key=cliente-A value=pedido-cliente-A-1
-RECIBIDO | topic=pedidos-particiones particion=X offset=... key=cliente-A value=pedido-cliente-A-3
+RECIBIDO | topic=pedidos-particiones particion=0 offset=2 key=cliente-A value=pedido-cliente-A-1
+RECIBIDO | topic=pedidos-particiones particion=0 offset=3 key=cliente-A value=pedido-cliente-A-3
+RECIBIDO | topic=pedidos-particiones particion=1 offset=0 key=null value=pedido-sin-key-2
+RECIBIDO | topic=pedidos-particiones particion=1 offset=1 key=cliente-E value=pedido-cliente-E-2
+RECIBIDO | topic=pedidos-particiones particion=1 offset=2 key=cliente-E value=pedido-cliente-E-5
+RECIBIDO | topic=pedidos-particiones particion=2 offset=0 key=null value=pedido-sin-key-3
+RECIBIDO | topic=pedidos-particiones particion=2 offset=1 key=cliente-F value=pedido-cliente-F-4
 ```
+
+Sin key: 1→0, 2→1, 3→2, 4→0 (round-robin). Con key: `cliente-A` siempre en 0, `cliente-E` siempre en 1 y `cliente-F` siempre en 2. Un segundo `/demo` continúa el round-robin donde quedó (1→1, 2→2, 3→0, 4→1), las keys vuelven a la misma partición y los offsets siguen subiendo.
 
 Nota: el consumidor lee las 3 particiones en paralelo, así que el **orden global** de las líneas puede mezclarse. Kafka solo garantiza el orden **dentro de una partición**, y justamente por eso se usa la key.
 
